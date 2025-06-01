@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Links fixer [WP]</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+
+  <h5>Paste the code here (from Code Editor on WP):</h5>
+  <textarea id="input"></textarea>
+  <button class="within-frame-button" onclick="fixLinks()">Fix Links</button>
+
+  <h5>Paste the code from here to Code Editor on WP:</h5>
+  <textarea id="output"></textarea>
+
+  <script>
+    const trustedExternalPatterns = ["eneba.com"];
+
+    function fixLinks() {
+      const inputHTML = document.getElementById("input").value;
+
+      const fixedHTML = inputHTML.replace(
+        /<a\s+([^>]*?)href=["'](.*?)["'](.*?)>/gi,
+        (match, preAttributes, href, postAttributes) => {
+          // Anchor link? Do nothing
+          if (href.trim().startsWith("#")) return match;
+
+          let tag = match;
+
+          // Ensure target="_blank" if missing
+          if (!/target=/.test(tag)) {
+            tag = tag.replace(">", ' target="_blank">');
+          }
+
+          // Ensure rel is correct if missing
+          if (!/rel=/.test(tag)) {
+            const isTrustedExternal = trustedExternalPatterns.some(pattern =>
+              href.includes(pattern)
+            );
+
+            if (isTrustedExternal) {
+              tag = tag.replace(">", ' rel="noreferrer noopener">');
+            } else {
+              tag = tag.replace(">", ' rel="noreferrer noopener nofollow">');
+            }
+          }
+
+          return tag;
+        }
+      );
+
+      document.getElementById("output").value = fixedHTML;
+    }
+  
+  </script>
+  <script src="../js/iframe-auto-resizer.js"></script>
+</body>
+</html>

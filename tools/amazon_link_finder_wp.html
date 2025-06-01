@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Amazon Link Finder [WP]</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+   
+  <h5>Paste the code here (from Code Editor on WP):</h5>
+  <textarea id="input"></textarea>
+  <button class="within-frame-button" onclick="extractAmazonLinks()">Extract Amazon Links</button>
+
+  <h5>Extracted Amazon links:</h5>
+  <textarea id="output" readonly></textarea>
+
+  <script>
+    function extractAmazonLinks() {
+      const inputText = document.getElementById('input').value;
+      const regex = /https:\/\/www\.amazon\.com\/[^\s"']+/g;
+      const matches = inputText.match(regex) || [];
+
+      const uniqueLinks = new Set();
+
+      for (const link of matches) {
+        const normalized = link.replace(/\/+$/, '');
+        uniqueLinks.add(normalized);
+      }
+
+      const output = document.getElementById('output');
+
+      if (uniqueLinks.size > 0) {
+        output.value = Array.from(uniqueLinks).join('\n');
+      } else {
+        output.value = 'No Amazon links found.';
+      }
+    }
+  </script>
+  <script src="../js/iframe-auto-resizer.js"></script>
+</body>
+</html>

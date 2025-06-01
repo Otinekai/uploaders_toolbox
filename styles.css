@@ -1,0 +1,110 @@
+/* Hiding the scrollbars while keeping the scrolling functionality, works on Brave, idk on others. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+h3 {
+    text-align: center;
+    color: goldenrod;
+    text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+    margin-top: 40px;
+    margin-bottom: 10px;
+    animation: glowPulse 5s ease-in-out infinite alternate; 
+}
+
+@keyframes glowPulse {
+  from {
+    text-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+  }
+  to {
+    text-shadow: 0 0 10px rgba(255, 217, 0, 0.55);
+  }
+}
+
+h5 {
+    text-align: center;
+    color: white;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.accordion-toggle {
+    display: block;
+    margin: 0 auto;
+    width: 500px;
+    padding: 6px 12px;
+    margin-top: 10px;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-weight: 500;
+    color: rgba(255, 255, 255, .85);
+}
+
+.tag-wp {
+  background-color: rgba(243, 137, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: rgb(217, 255, 0);
+}
+
+.tag-gd {
+  background-color: rgba(243, 137, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: rgb(172, 248, 255);
+}
+
+.within-frame-button {
+    display: block;
+    margin: 0 auto;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.accordion-content {
+  display: flex;
+  justify-content: center;
+  max-width: 1200px;
+  margin: 0 auto; /* <-- centers the container */
+  margin-top: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 0 10px rgba(255, 0, 217, 0.785);
+  animation: borderPulse 5s ease-in-out infinite alternate;
+  border-radius: 8px;
+}
+
+@keyframes borderPulse {
+  0% { box-shadow: 0 0 10px rgba(255, 0, 217, 0.785); }
+  100% { box-shadow: 0 0 12px rgba(255, 149, 0, 0.785); }
+}
+
+iframe {
+  width: 1200px;
+  padding: 10px 10px;
+  margin-top: 10px;
+}
+
+textarea {
+  min-height: 150px;
+  min-width: 150px;
+  border: 1px solid peachpuff;
+  padding: 10px;
+  box-shadow: 0 0 5px rgba(95, 255, 74, 0.532);
+}
+
+.input_area_html {
+  background-color: rgb(32, 38, 51);
+
+  height: 150px;
+  min-width: 150px;
+  overflow-y: auto;
+
+  border: 1px solid peachpuff;
+  border-radius: 5px;
+
+  padding: 10px;
+  margin-bottom: 1rem;
+}

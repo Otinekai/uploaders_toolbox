@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Amazon Links Updator [WP]</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+
+  <h5>Paste the code here (from Code Editor on WP):</h5>
+  <textarea id="mainText"></textarea>
+
+  <h5>Paste affiliate links here (one per line):</h5>
+  <textarea id="affiliateLinks"></textarea>
+
+  <button class="within-frame-button" onclick="replaceLinks()">Replace Amazon Links</button>
+
+  <h5>Paste the code from here to Code Editor on WP:</h5>
+  <textarea id="outputText" readonly></textarea>
+
+  <h5>Replacement Log:</h5>
+  <textarea id="log" readonly></textarea>
+
+  <script>
+    function getASIN(url) {
+      const match = url.match(/\/dp\/(B0[A-Z0-9]{8})/);
+      return match ? match[1] : null;
+    }
+
+    function replaceLinks() {
+      const inputText = document.getElementById('mainText').value;
+      const affiliateRaw = document.getElementById('affiliateLinks').value;
+      const affiliateLines = affiliateRaw.split('\n').map(l => l.trim()).filter(l => l.includes('amazon.com'));
+
+      const asinMap = {};
+      for (const affLink of affiliateLines) {
+        const asin = getASIN(affLink);
+        if (asin) asinMap[asin] = affLink;
+      }
+
+      const log = [];
+      const seen = new Set();
+
+      const amazonLinkRegex = /https:\/\/www\.amazon\.com\/[^\s"')<]+/g;
+
+      const output = inputText.replace(amazonLinkRegex, (match) => {
+        const asin = getASIN(match);
+        if (!asin) {
+          log.push(`❌ Skipped (invalid or no ASIN): ${match}`);
+          return match;
+        }
+        if (asin in asinMap) {
+          if (!seen.has(asin)) {
+            log.push(`✅ Replaced ASIN ${asin}: ${match} → ${asinMap[asin]}`);
+            seen.add(asin);
+          }
+          return asinMap[asin];
+        } else {
+          log.push(`❌ No affiliate link found for ASIN ${asin}: ${match}`);
+          return match;
+        }
+      });
+
+      document.getElementById('outputText').value = output;
+      document.getElementById('log').value = log.join('\n');
+    }
+  </script>
+  <script src="../js/iframe-auto-resizer.js"></script>
+</body>
+</html>

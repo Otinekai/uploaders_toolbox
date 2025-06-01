@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pros Tables Fixer [WP]</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+
+  <h5>Paste the code here (from Code Editor on WP):</h5>
+  <textarea id="inputHtml"></textarea>
+
+  <button class="within-frame-button" onclick="formatProsColumn()">Format Pros</button>
+
+  <h5>Paste the code from here to Code Editor on WP:</h5>
+  <textarea id="outputHtml" readonly></textarea>
+
+  <script>
+    function formatProsColumn() {
+      const inputHTML = document.getElementById("inputHtml").value;
+      const outputTextarea = document.getElementById("outputHtml");
+
+      if (!inputHTML.trim()) {
+        outputTextarea.value = "";
+        return;
+      }
+
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = inputHTML;
+
+      if (tempDiv.childNodes.length === 0 && inputHTML.includes("<table")) {
+        outputTextarea.value = inputHTML;
+        return;
+      }
+
+      const tables = tempDiv.querySelectorAll("figure.wp-block-table table, table:not(figure.wp-block-table table)");
+
+      tables.forEach(table => {
+        let prosIndex = -1;
+        const headerRow = table.querySelector("thead tr") || table.querySelector("tr");
+
+        if (headerRow) {
+          headerRow.querySelectorAll("th, td").forEach((th, idx) => {
+            if (th.textContent.trim().toLowerCase() === "pros") {
+              prosIndex = idx;
+            }
+          });
+        }
+
+        if (prosIndex === -1) return;
+
+        const bodyRows = table.querySelectorAll("tbody tr");
+        bodyRows.forEach(row => {
+          const cells = row.querySelectorAll("td");
+          if (cells.length > prosIndex) {
+            const prosCell = cells[prosIndex];
+            const originalHTML = prosCell.innerHTML;
+
+            if (!originalHTML.includes("✅") && !originalHTML.includes("❌")) return;
+
+            const parts = originalHTML
+              .split(/(?=✅|❌)/g)
+              .map(part =>
+                part.trim().replace(/^(?:\s*<br\s*\/?>\s*)+|(?:\s*<br\s*\/?>\s*)+$/gi, '').trim()
+              )
+              .filter(part => part.length > 0);
+
+            const newHTML = parts.join("<br><br>");
+
+            if (newHTML !== originalHTML) {
+              prosCell.innerHTML = newHTML;
+            }
+          }
+        });
+      });
+
+      outputTextarea.value = tempDiv.innerHTML;
+    }
+  </script>
+  <script src="../js/iframe-auto-resizer.js"></script>
+</body>
+</html>

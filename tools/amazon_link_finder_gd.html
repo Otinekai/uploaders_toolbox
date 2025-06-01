@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon Link Finder [GD]</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css">
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+
+  <h5>Paste here from Google Docs draft:</h5>
+  <div id="input_area_html" class="input_area_html" contenteditable="true"></div>
+  <button class="within-frame-button" onclick="extractAmazonLinks()">Get links</button>
+
+  <h5>Amazon links found:</h5>
+  <textarea id="outputArea" readonly></textarea>
+
+  <script>
+    function extractAmazonLinks() {
+      const inputHTML = document.getElementById('input_area_html').innerHTML;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(inputHTML, 'text/html');
+      const anchors = doc.querySelectorAll('a[href*="amazon.com"]');
+
+      const links = new Set();
+      anchors.forEach(anchor => {
+        links.add(anchor.href);
+      });
+
+      const output = Array.from(links).join('\n');
+      document.getElementById('outputArea').value = output;
+    }
+  </script>
+  <script src="../js/iframe-auto-resizer.js"></script>
+</body>
+</html>
