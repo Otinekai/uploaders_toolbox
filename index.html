@@ -40,6 +40,11 @@
       <iframe src="tools/cta_button_maker_wp.html"></iframe>
     </div>
 
+    <h3>IMAGES</h3>
+    <button class="accordion-toggle" @click="open = (open === 'alt_text_from_headers') ? null : 'alt_text_from_headers'"> PROS TABLE FIXER <span class="tag-wp">[WP]</span></button>
+    <div class="accordion-content" x-show="open === 'alt_text_from_headers'" x-transition>
+      <iframe src="tools/alt_text_from_headers.html"></iframe>
+    </div>  
 
     <h3>TABLES</h3>
     <button class="accordion-toggle" @click="open = (open === 'pros_table_fixer_wp') ? null : 'pros_table_fixer_wp'"> PROS TABLE FIXER <span class="tag-wp">[WP]</span></button>
