@@ -58,7 +58,7 @@
   window.addEventListener('message', function(event) {
     if (!event.data || !event.data.type || event.data.type !== 'setHeight') return;
 
-    const iframe = document.querySelector(`iframe[src="${event.data.src}"]`);
+    const iframe = Array.from(document.querySelectorAll('iframe')).find(f => f.src.includes(event.data.src));
     if (iframe) {
       iframe.style.height = event.data.height + 'px';
     }
