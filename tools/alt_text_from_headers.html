@@ -9,7 +9,7 @@
 </head>
 <body>
 
-  <h5>Paste here from Google Docs draft:</h5>
+  <h5>Paste the code here (from Code Editor on WP):</h5>
   <textarea id="inputText"></textarea>
 
   <button class="within-frame-button" onclick="addAltText()">Add alt text</button>
@@ -33,30 +33,36 @@
           const rawBefore = input.split(block)[0];
           const precedingBlocks = rawBefore.split(/(<!-- wp:[\s\S]*?-->[\s\S]*?<!-- \/wp:[^>]*?-->)/gs).filter(Boolean);
           let headingMatch = null;
+
           for (let j = precedingBlocks.length - 1; j >= 0 && j >= precedingBlocks.length - 6; j--) {
             const candidate = precedingBlocks[j];
-            if (candidate.startsWith("<!-- wp:heading {\"level\":3}")) {
-              const headingTextMatch = candidate.match(/<strong>(.*?)<\/strong>/);
-              if (headingTextMatch) {
-                headingMatch = headingTextMatch[1]
-                  .replace(/^\d+\.\s*/, "")
-                  .replace(/\[(.*?)\]/, "- $1")
-                  .replace(/[\[\]]/g, "");
+
+            if (candidate.startsWith("<!-- wp:heading") && candidate.includes("<h3")) {
+              // Match: <h3><a>Text</a> [Label]</h3>
+              const anchorLabelMatch = candidate.match(/<h3[^>]*?>\s*<a [^>]*?>(.*?)<\/a>\s*\[(.*?)\]\s*<\/h3>/);
+              if (anchorLabelMatch) {
+                headingMatch = `${anchorLabelMatch[1].trim()} - ${anchorLabelMatch[2].trim()}`;
+                break;
               }
-              break;
+
+              // Match: <h3>2. Stardew Valley</h3> and strip numbering
+              const plainHeadingMatch = candidate.match(/<h3[^>]*?>(.*?)<\/h3>/);
+              if (plainHeadingMatch) {
+                headingMatch = plainHeadingMatch[1].replace(/^\s*\d+\.\s*/, "").trim();
+                break;
+              }
             }
           }
 
           if (headingMatch) {
-            const newBlock = block.replace(/(<img [^>]*?)alt=\".*?\"/, `$1alt=\"${headingMatch}\"`)
-                                   .replace(/(<img (?![^>]*alt=)[^>]*?)class=/, `<img alt=\"${headingMatch}\" class=`);
+            const newBlock = block
+              .replace(/(<img [^>]*?)alt=\".*?\"/, `$1alt="${headingMatch}"`)
+              .replace(/(<img (?![^>]*alt=)[^>]*?)class=/, `<img alt="${headingMatch}" class=`);
             output += newBlock;
-            log += `✔️ Added alt text to image: "${headingMatch}"
-`;
+            log += `✔️ Added alt text to image: "${headingMatch}"\n`;
           } else {
             output += block;
-            log += `⚠️ Skipped image - no matching heading found
-`;
+            log += `⚠️ Skipped image - no matching heading found\n`;
           }
         } else {
           output += block;
