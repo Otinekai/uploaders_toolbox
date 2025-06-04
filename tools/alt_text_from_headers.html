@@ -41,16 +41,14 @@
               // Match: <h3><a>Title</a> [Label]</h3>
               const anchorLabelMatch = candidate.match(/<h3.*?><a.*?>(.*?)<\/a>\s*\[(.*?)\]<\/h3>/);
               if (anchorLabelMatch) {
-                headingMatch = `${anchorLabelMatch[1]} - ${anchorLabelMatch[2]}`;
+                headingMatch = `${anchorLabelMatch[1].trim()} - ${anchorLabelMatch[2].trim()}`;
                 break;
               }
 
               // Match: <h3>2. Stardew Valley</h3>
               const plainHeadingMatch = candidate.match(/<h3.*?>(.*?)<\/h3>/);
               if (plainHeadingMatch) {
-                headingMatch = plainHeadingMatch[1]
-                  .replace(/^\d+\.\s*/, "") // remove leading number
-                  .trim();
+                headingMatch = plainHeadingMatch[1].trim();
                 break;
               }
             }
