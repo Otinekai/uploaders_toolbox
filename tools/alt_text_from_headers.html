@@ -21,6 +21,26 @@
   <textarea id="logText"></textarea>
 
   <script>
+    function extractAltTextFromHeading(block) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(block, "text/html");
+      const h3 = doc.querySelector("h3");
+
+      if (!h3) return null;
+
+      const anchor = h3.querySelector("a");
+      const fullText = h3.textContent.trim();
+
+      if (anchor) {
+        const anchorText = anchor.textContent.trim();
+        const labelMatch = fullText.match(/\[(.*?)\]/);
+        const labelText = labelMatch ? labelMatch[1].trim() : "";
+        return labelText ? `${anchorText} - ${labelText}` : anchorText;
+      } else {
+        return fullText.replace(/^\d+\.\s*/, "").trim(); // remove numbering
+      }
+    }
+
     function addAltText() {
       const input = document.getElementById("inputText").value;
       const lines = input.split(/(<!-- wp:image.*?linkDestination\":\"none\".*?<!-- \/wp:image -->)/gs);
@@ -29,6 +49,7 @@
 
       for (let i = 0; i < lines.length; i++) {
         const block = lines[i];
+
         if (block.startsWith("<!-- wp:image") && block.includes('linkDestination":"none"') && block.includes('https://blog-uploads.')) {
           const rawBefore = input.split(block)[0];
           const precedingBlocks = rawBefore.split(/(<!-- wp:[\s\S]*?-->[\s\S]*?<!-- \/wp:[^>]*?-->)/gs).filter(Boolean);
@@ -36,29 +57,16 @@
 
           for (let j = precedingBlocks.length - 1; j >= 0 && j >= precedingBlocks.length - 6; j--) {
             const candidate = precedingBlocks[j];
-
             if (candidate.startsWith("<!-- wp:heading") && candidate.includes("<h3")) {
-              // Match: <h3><a>Text</a> [Label]</h3>
-              const anchorLabelMatch = candidate.match(/<h3[^>]*?>\s*<a [^>]*?>(.*?)<\/a>\s*\[(.*?)\]\s*<\/h3>/);
-              if (anchorLabelMatch) {
-                headingMatch = `${anchorLabelMatch[1].trim()} - ${anchorLabelMatch[2].trim()}`;
-                break;
-              }
-
-              // Match: <h3>2. Stardew Valley</h3> and strip numbering
-              const plainHeadingMatch = candidate.match(/<h3[^>]*?>(.*?)<\/h3>/);
-              if (plainHeadingMatch) {
-                headingMatch = plainHeadingMatch[1].replace(/^\s*\d+\.\s*/, "").trim();
-                break;
-              }
+              headingMatch = extractAltTextFromHeading(candidate);
+              if (headingMatch) break;
             }
           }
 
           if (headingMatch) {
-            const newBlock = block
-              .replace(/(<img [^>]*?)alt=\".*?\"/, `$1alt="${headingMatch}"`)
-              .replace(/(<img (?![^>]*alt=)[^>]*?)class=/, `<img alt="${headingMatch}" class=`);
-            output += newBlock;
+            const updatedBlock = block.replace(/<img([^>]*?)alt=".*?"([^>]*?)\/>/, `<img$1alt="${headingMatch}"$2/>`)
+                                      .replace(/<img((?!alt=)[^>]*?)class=/, `<img alt="${headingMatch}"$1class=`);
+            output += updatedBlock;
             log += `✔️ Added alt text to image: "${headingMatch}"\n`;
           } else {
             output += block;
