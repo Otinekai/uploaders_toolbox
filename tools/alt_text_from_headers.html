@@ -33,30 +33,39 @@
           const rawBefore = input.split(block)[0];
           const precedingBlocks = rawBefore.split(/(<!-- wp:[\s\S]*?-->[\s\S]*?<!-- \/wp:[^>]*?-->)/gs).filter(Boolean);
           let headingMatch = null;
+
           for (let j = precedingBlocks.length - 1; j >= 0 && j >= precedingBlocks.length - 6; j--) {
             const candidate = precedingBlocks[j];
+
+            // Option 1: match <strong> format
             if (candidate.startsWith("<!-- wp:heading {\"level\":3}")) {
-              const headingTextMatch = candidate.match(/<strong>(.*?)<\/strong>/);
-              if (headingTextMatch) {
-                headingMatch = headingTextMatch[1]
+              const strongMatch = candidate.match(/<strong>(.*?)<\/strong>/);
+              if (strongMatch) {
+                headingMatch = strongMatch[1]
                   .replace(/^\d+\.\s*/, "")
                   .replace(/\[(.*?)\]/, "- $1")
                   .replace(/[\[\]]/g, "");
+                break;
               }
-              break;
+
+              // Option 2: match <h3><a>text</a> [label]</h3> format
+              const anchorHeadingMatch = candidate.match(/<h3.*?><a.*?>(.*?)<\/a>\s*\[(.*?)\]<\/h3>/);
+              if (anchorHeadingMatch) {
+                headingMatch = `${anchorHeadingMatch[1]} - ${anchorHeadingMatch[2]}`;
+                break;
+              }
             }
           }
 
           if (headingMatch) {
-            const newBlock = block.replace(/(<img [^>]*?)alt=\".*?\"/, `$1alt=\"${headingMatch}\"`)
-                                   .replace(/(<img (?![^>]*alt=)[^>]*?)class=/, `<img alt=\"${headingMatch}\" class=`);
+            const newBlock = block
+              .replace(/(<img [^>]*?)alt=\".*?\"/, `$1alt="${headingMatch}"`)
+              .replace(/(<img (?![^>]*alt=)[^>]*?)class=/, `<img alt="${headingMatch}" class=`);
             output += newBlock;
-            log += `✔️ Added alt text to image: "${headingMatch}"
-`;
+            log += `✔️ Added alt text to image: "${headingMatch}"\n`;
           } else {
             output += block;
-            log += `⚠️ Skipped image - no matching heading found
-`;
+            log += `⚠️ Skipped image - no matching heading found\n`;
           }
         } else {
           output += block;
