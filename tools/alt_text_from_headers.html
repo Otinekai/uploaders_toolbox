@@ -36,7 +36,11 @@
         const labelText = labelMatch ? labelMatch[1].trim() : "";
         return labelText ? `${anchorText} - ${labelText}` : anchorText;
       } else {
-        return fullText.replace(/^\d+\.\s*/, "").trim();
+        // Remove number at start
+        let cleaned = fullText.replace(/^\d+\.\s*/, "").trim();
+        // Convert first [label] to " - label" and remove brackets
+        cleaned = cleaned.replace(/\[(.*?)\]/, (_, label) => ` - ${label}`);
+        return cleaned;
       }
     }
 
@@ -90,6 +94,7 @@
       document.getElementById("logText").value = log;
     }
   </script>
+
   <script src="../js/iframe-auto-resizer.js"></script>
 </body>
 </html>
