@@ -25,7 +25,6 @@
       const parser = new DOMParser();
       const doc = parser.parseFromString(block, "text/html");
       const h3 = doc.querySelector("h3");
-
       if (!h3) return null;
 
       const anchor = h3.querySelector("a");
@@ -37,7 +36,18 @@
         const labelText = labelMatch ? labelMatch[1].trim() : "";
         return labelText ? `${anchorText} - ${labelText}` : anchorText;
       } else {
-        return fullText.replace(/^\d+\.\s*/, "").trim(); // remove numbering
+        return fullText.replace(/^\d+\.\s*/, "").trim();
+      }
+    }
+
+    function injectAltTextToImg(block, altText) {
+      // If alt already exists, replace it
+      if (block.includes('alt="')) {
+        return block.replace(/(<img[^>]*?alt=")(.*?)(")/, `$1${altText}$3`);
+      } else {
+        // Insert alt before class or at end of <img>
+        return block.replace(/<img([^>]*?)class=/, `<img alt="${altText}"$1class=`)
+                    .replace(/<img((?!alt=)[^>]*?)\/?>/, `<img alt="${altText}"$1/>`);
       }
     }
 
@@ -64,8 +74,7 @@
           }
 
           if (headingMatch) {
-            const updatedBlock = block.replace(/<img([^>]*?)alt=".*?"([^>]*?)\/>/, `<img$1alt="${headingMatch}"$2/>`)
-                                      .replace(/<img((?!alt=)[^>]*?)class=/, `<img alt="${headingMatch}"$1class=`);
+            const updatedBlock = injectAltTextToImg(block, headingMatch);
             output += updatedBlock;
             log += `✔️ Added alt text to image: "${headingMatch}"\n`;
           } else {
