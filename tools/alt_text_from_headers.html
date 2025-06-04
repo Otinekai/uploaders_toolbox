@@ -37,21 +37,20 @@
           for (let j = precedingBlocks.length - 1; j >= 0 && j >= precedingBlocks.length - 6; j--) {
             const candidate = precedingBlocks[j];
 
-            // Option 1: match <strong> format
-            if (candidate.startsWith("<!-- wp:heading {\"level\":3}")) {
-              const strongMatch = candidate.match(/<strong>(.*?)<\/strong>/);
-              if (strongMatch) {
-                headingMatch = strongMatch[1]
-                  .replace(/^\d+\.\s*/, "")
-                  .replace(/\[(.*?)\]/, "- $1")
-                  .replace(/[\[\]]/g, "");
+            if (candidate.startsWith("<!-- wp:heading") && candidate.includes("<h3")) {
+              // Match: <h3><a>Title</a> [Label]</h3>
+              const anchorLabelMatch = candidate.match(/<h3.*?><a.*?>(.*?)<\/a>\s*\[(.*?)\]<\/h3>/);
+              if (anchorLabelMatch) {
+                headingMatch = `${anchorLabelMatch[1]} - ${anchorLabelMatch[2]}`;
                 break;
               }
 
-              // Option 2: match <h3><a>text</a> [label]</h3> format
-              const anchorHeadingMatch = candidate.match(/<h3.*?><a.*?>(.*?)<\/a>\s*\[(.*?)\]<\/h3>/);
-              if (anchorHeadingMatch) {
-                headingMatch = `${anchorHeadingMatch[1]} - ${anchorHeadingMatch[2]}`;
+              // Match: <h3>2. Stardew Valley</h3>
+              const plainHeadingMatch = candidate.match(/<h3.*?>(.*?)<\/h3>/);
+              if (plainHeadingMatch) {
+                headingMatch = plainHeadingMatch[1]
+                  .replace(/^\d+\.\s*/, "") // remove leading number
+                  .trim();
                 break;
               }
             }
