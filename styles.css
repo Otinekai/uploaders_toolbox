@@ -56,6 +56,14 @@ h5 {
   color: rgb(172, 248, 255);
 }
 
+.tag-old {
+  background-color: rgba(243, 137, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: rgb(255, 255, 255);
+  text-shadow: 0 0 8px rgb(255, 0, 0);
+}
+
 .within-frame-button {
     display: block;
     margin: 0 auto;
