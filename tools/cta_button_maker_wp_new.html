@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CTA Buttons Maker [WP]</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  
+  <h5>Paste the code here (from Code Editor on WP):</h5>
+  <textarea id="inputText"></textarea>
+
+  <button id="convertBtn" class="within-frame-button" >Convert</button>
+
+  <h5>Paste the code from here to Code Editor on WP:</h5>
+  <textarea id="outputText"></textarea>
+
+  <script>
+    document.getElementById('convertBtn').addEventListener('click', function () {
+      const input = document.getElementById('inputText').value;
+
+      // Old regex:
+      // const regex = /<!--\s*wp:paragraph[^>]*-->\s*<p[^>]*>\s*(?:<(strong|em|b|i|u|br)[^>]*>\s*)*<a\s+href="([^"]+)"[^>]*>[\s\S]*?<\/a>\s*(?:<\/\1>\s*)*(?:&nbsp;|&#160;|\s|<br\s*\/?>)*<\/p>\s*<!--\s*\/wp:paragraph\s*-->/gi;
+
+      // Updated regex to capture URL and the inner text of <a>
+      const regex = /<!--\s*wp:paragraph[^>]*-->\s*<p[^>]*>\s*(?:<(strong|em|b|i|u|br)[^>]*>\s*)*<a\s+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>\s*(?:<\/\1>\s*)*(?:&nbsp;|&#160;|\s|<br\s*\/?>)*<\/p>\s*<!--\s*\/wp:paragraph\s*-->/gi;
+      
+      const output = input.replace(regex, (match, _, url, linkText) => {
+        const totalLinks = (match.match(/<a\s+/g) || []).length;
+        if (totalLinks !== 1) return match;
+
+        // Trim whitespace from the captured link text for label
+        const label = linkText.trim();
+
+        const isAmazon = url.includes('amazon.com');
+        const isEneba = url.includes('eneba.com');
+
+        const lines = [];
+
+        if (isEneba) {
+          lines.push('<!-- wp:eneba/cta-button {"allowFollow":true} -->');
+          lines.push('<div class="wp-block-eneba-cta-button">');
+          lines.push(`  <a href="${url}" class="wp-block-eneba-cta-button-link" target="_blank" rel="noopener noreferrer">`);
+          lines.push(`    <span class="wp-block-eneba-cta-button-text">${label}</span>`);
+          lines.push('  </a>');
+          lines.push('</div>');
+          lines.push('<!-- /wp:eneba/cta-button -->');
+        } else {
+          lines.push('<!-- wp:eneba/cta-button -->');
+          lines.push('<div class="wp-block-eneba-cta-button">');
+          lines.push(`  <a href="${url}" class="wp-block-eneba-cta-button-link" target="_blank" rel="noopener noreferrer nofollow">`);
+          lines.push(`    <span class="wp-block-eneba-cta-button-text">${label}</span>`);
+          lines.push('  </a>');
+          lines.push('</div>');
+          lines.push('<!-- /wp:eneba/cta-button -->');
+        }
+
+        return lines.join('\n');
+      });
+
+      document.getElementById('outputText').value = output;
+    });
+  </script>
+  <script src="../js/iframe-auto-resizer.js"></script>
+</body>
+</html>
