@@ -24,11 +24,14 @@
     function create_trust_bubbles() {
         const inputHTML = document.getElementById("inputHtml").value;
 
-        const bubbleMap = {
-            "PRO TIP": "pro-tip",
-            // Add more mappings here as needed
-            // "WARNING": "warning",
-            // "NOTE": "note"
+        const bubbleTemplates = {
+          "PRO TIP": ({ text }) => `<!-- wp:eneba/trust-bubbles {"bubbleType":"pro-tip","highlightText":"${text}"} -->
+<div class="wp-block-eneba-trust-bubbles"><div class="wp-block-eneba-trust-bubbles"><div class="trust-bubbles-content"><div class="trust-bubble trust-bubble-pro-tip"><div class="bubble-type-label">Pro tip</div><div class="bubble-content">${text}</div></div></div></div></div>
+<!-- /wp:eneba/trust-bubbles -->`,
+
+          "WHY WE CHOSE THIS": ({ text }) => `<!-- wp:eneba/trust-bubbles {"highlightText":"${text}"} -->
+<div class="wp-block-eneba-trust-bubbles"><div class="wp-block-eneba-trust-bubbles"><div class="trust-bubbles-content"><div class="trust-bubble trust-bubble-why-we-chose"><div class="bubble-type-label">Why we chose it</div><div class="bubble-content">${text}</div></div></div></div></div>
+<!-- /wp:eneba/trust-bubbles -->`,
         };
 
         const tableRegex = /<!-- wp:table -->(.*?)<!-- \/wp:table -->/gs;
@@ -45,22 +48,22 @@
             }
 
             const titleRaw = tdMatches[0][1].trim();
-            const highlightText = tdMatches[1][1].trim();
-            const bubbleType = bubbleMap[titleRaw.toUpperCase()];
+            const highlightTextRaw = tdMatches[1][1].trim();
+            const titleKey = titleRaw.toUpperCase();
 
-            if (!bubbleType) {
+            const templateFn = bubbleTemplates[titleKey];
+            if (!templateFn) {
                 logEntries.push(`Skipped table at position ${offset}: Unrecognized bubble label "${titleRaw}".`);
                 return match;
             }
 
+            const escapedText = highlightTextRaw.replace(/"/g, '&quot;');
+            const bubbleBlock = templateFn({ text: escapedText });
+
             replacements++;
-            logEntries.push(`✅ Replaced table at position ${offset} → bubbleType: "${bubbleType}", highlightText: "${highlightText}"`);
+            logEntries.push(`✅ Replaced table at position ${offset} → "${titleRaw}"`);
 
-            const escapedHighlightText = highlightText.replace(/"/g, '&quot;');
-
-            return `<!-- wp:eneba/trust-bubbles {"bubbleType":"${bubbleType}","highlightText":"${escapedHighlightText}"} -->
-<div class="wp-block-eneba-trust-bubbles"><div class="wp-block-eneba-trust-bubbles"><div class="trust-bubbles-content"><div class="trust-bubble trust-bubble-${bubbleType}"><div class="bubble-type-label">${titleRaw}</div><div class="bubble-content">${highlightText}</div></div></div></div></div>
-<!-- /wp:eneba/trust-bubbles -->`;
+            return bubbleBlock;
         });
 
         document.getElementById("outputHtml").value = outputHTML;
