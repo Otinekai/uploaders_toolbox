@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pros Tables Fixer [WP]</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body class="container">
+
+  <h5>Paste the code here (from Code Editor on WP):</h5>
+  <textarea id="inputHtml" style="height: 200px;"></textarea>
+
+  <button onclick="create_trust_bubbles()">Create Trust Bubbles</button>
+
+  <h5>Paste the code from here to Code Editor on WP:</h5>
+  <textarea id="outputHtml" readonly style="height: 200px;"></textarea>
+
+  <h5>Log:</h5>
+  <textarea id="logText" readonly style="height: 200px;"></textarea>
+
+  <script>
+    function create_trust_bubbles() {
+        const inputHTML = document.getElementById("inputHtml").value;
+
+        const bubbleMap = {
+            "PRO TIP": "pro-tip",
+            // Add more mappings here as needed
+            // "WARNING": "warning",
+            // "NOTE": "note"
+        };
+
+        const tableRegex = /<!-- wp:table -->(.*?)<!-- \/wp:table -->/gs;
+        let logEntries = [];
+        let replacements = 0;
+
+        const outputHTML = inputHTML.replace(tableRegex, (match, innerTable, offset) => {
+            const tdRegex = /<td>(.*?)<\/td>/gis;
+            const tdMatches = [...innerTable.matchAll(tdRegex)];
+
+            if (tdMatches.length < 2) {
+                logEntries.push(`Skipped table at position ${offset}: Less than 2 <td> elements.`);
+                return match;
+            }
+
+            const titleRaw = tdMatches[0][1].trim();
+            const highlightText = tdMatches[1][1].trim();
+            const bubbleType = bubbleMap[titleRaw.toUpperCase()];
+
+            if (!bubbleType) {
+                logEntries.push(`Skipped table at position ${offset}: Unrecognized bubble label "${titleRaw}".`);
+                return match;
+            }
+
+            replacements++;
+            logEntries.push(`✅ Replaced table at position ${offset} → bubbleType: "${bubbleType}", highlightText: "${highlightText}"`);
+
+            const escapedHighlightText = highlightText.replace(/"/g, '&quot;');
+
+            return `<!-- wp:eneba/trust-bubbles {"bubbleType":"${bubbleType}","highlightText":"${escapedHighlightText}"} -->
+<div class="wp-block-eneba-trust-bubbles"><div class="wp-block-eneba-trust-bubbles"><div class="trust-bubbles-content"><div class="trust-bubble trust-bubble-${bubbleType}"><div class="bubble-type-label">${titleRaw}</div><div class="bubble-content">${highlightText}</div></div></div></div></div>
+<!-- /wp:eneba/trust-bubbles -->`;
+        });
+
+        document.getElementById("outputHtml").value = outputHTML;
+        const logText = document.getElementById("logText");
+        if (logText) {
+            logText.value = `Replacements: ${replacements}\n\n` + logEntries.join("\n");
+        }
+    }
+  </script>
+
+</body>
+</html>
