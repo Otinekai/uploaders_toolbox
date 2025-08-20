@@ -83,7 +83,7 @@
             const templateFn = bubbleTemplates[titleKey];
 
             if (!templateFn) {
-                logEntries.push(`Skipped table at position ${offset}: Unrecognized bubble type "${tdMatch[1]}".`);
+                logEntries.push(`Skipped table of an unrecognized bubble type "${tdMatch[1]}".`);
                 return match;
             }
 
