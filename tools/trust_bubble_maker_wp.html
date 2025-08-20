@@ -21,7 +21,6 @@
   <textarea id="logText" readonly style="height: 200px;"></textarea>
 
   <script>
-    // Helper function to strip HTML and get plain text
     function toPlainText(html) {
       const div = document.createElement("div");
       div.innerHTML = html;
@@ -31,13 +30,28 @@
     function create_trust_bubbles() {
         const inputHTML = document.getElementById("inputHtml").value;
 
+        // Bubble templates with no content, just type
         const bubbleTemplates = {
-          "PRO TIP": ({ text }) => `<!-- wp:eneba/trust-bubbles {"bubbleType":"pro-tip","highlightText":"${text}"} -->
-<div class="wp-block-eneba-trust-bubbles"><div class="wp-block-eneba-trust-bubbles"><div class="trust-bubbles-content"><div class="trust-bubble trust-bubble-pro-tip"><div class="bubble-type-label">Pro tip</div><div class="bubble-content">${text}</div></div></div></div></div>
+          "PRO TIP": () => `<!-- wp:eneba/trust-bubbles {"bubbleType":"pro-tip"} -->
+<div class="wp-block-eneba-trust-bubbles">
+  <div class="trust-bubbles-content">
+    <div class="trust-bubble trust-bubble-pro-tip">
+      <div class="bubble-type-label">Pro tip</div>
+      <div class="bubble-content"></div>
+    </div>
+  </div>
+</div>
 <!-- /wp:eneba/trust-bubbles -->`,
 
-          "WHY WE CHOSE IT": ({ text }) => `<!-- wp:eneba/trust-bubbles {"highlightText":"${text}"} -->
-<div class="wp-block-eneba-trust-bubbles"><div class="wp-block-eneba-trust-bubbles"><div class="trust-bubbles-content"><div class="trust-bubble trust-bubble-why-we-chose"><div class="bubble-type-label">Why we chose it</div><div class="bubble-content">${text}</div></div></div></div></div>
+          "WHY WE CHOSE IT": () => `<!-- wp:eneba/trust-bubbles {"bubbleType":"why-we-chose"} -->
+<div class="wp-block-eneba-trust-bubbles">
+  <div class="trust-bubbles-content">
+    <div class="trust-bubble trust-bubble-why-we-chose">
+      <div class="bubble-type-label">Why we chose it</div>
+      <div class="bubble-content"></div>
+    </div>
+  </div>
+</div>
 <!-- /wp:eneba/trust-bubbles -->`,
         };
 
@@ -46,39 +60,31 @@
         let replacements = 0;
 
         const outputHTML = inputHTML.replace(tableRegex, (match, innerTable, offset) => {
-            const tdRegex = /<td>(.*?)<\/td>/gis;
-            const tdMatches = [...innerTable.matchAll(tdRegex)];
+            const tdRegex = /<td>(.*?)<\/td>/is;
+            const tdMatch = innerTable.match(tdRegex);
 
-            if (tdMatches.length < 2) {
-                logEntries.push(`Skipped table at position ${offset}: Less than 2 <td> elements.`);
+            if (!tdMatch) {
+                logEntries.push(`Skipped table at position ${offset}: No <td> found.`);
                 return match;
             }
 
-            const titleRaw = tdMatches[0][1].trim();
-            const highlightTextRaw = tdMatches[1][1].trim();
-            const titleKey = toPlainText(titleRaw).trim().toUpperCase();
-
+            const titleKey = toPlainText(tdMatch[1]).trim().toUpperCase();
             const templateFn = bubbleTemplates[titleKey];
+
             if (!templateFn) {
-                logEntries.push(`Skipped table at position ${offset}: Unrecognized bubble label "${titleRaw}".`);
+                logEntries.push(`Skipped table at position ${offset}: Unrecognized bubble type "${tdMatch[1]}".`);
                 return match;
             }
-
-            const plainText = toPlainText(highlightTextRaw).trim();
-            const escapedText = plainText.replace(/"/g, '&quot;');
-            const bubbleBlock = templateFn({ text: escapedText });
 
             replacements++;
-            logEntries.push(`✅ Replaced table at position ${offset} → "${titleRaw}"`);
+            logEntries.push(`✅ Replaced table at position ${offset} → "${tdMatch[1]}"`);
 
-            return bubbleBlock;
+            return templateFn();
         });
 
         document.getElementById("outputHtml").value = outputHTML;
-        const logText = document.getElementById("logText");
-        if (logText) {
-            logText.value = `Replacements: ${replacements}\n\n` + logEntries.join("\n");
-        }
+        document.getElementById("logText").value =
+          `Replacements: ${replacements}\n\n` + logEntries.join("\n");
     }
   </script>
   <script src="../js/iframe-auto-resizer.js"></script>
