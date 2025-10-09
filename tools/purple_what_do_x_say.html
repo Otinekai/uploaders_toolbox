@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PURPLE "What do X say?"</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+
+  <h5>Paste the code here (from Code Editor on WP):</h5>
+  <textarea id="input"></textarea>
+
+  <button class="within-frame-button" id="convert">Convert</button>
+
+  <h5>Paste the code from here to Code Editor on WP:</h5>
+  <textarea id="output"></textarea>
+
+<script>
+(function(){
+  'use strict';
+
+  const inputEl = document.getElementById('input');
+  const outputEl = document.getElementById('output');
+  const convertBtn = document.getElementById('convert');
+
+  // Phrases to detect and highlight
+  const targetPhrases = [
+    'what do gamers say?',
+    'what do board gamers say?',
+    'what do readers say?' 
+  ];
+
+  function processText(fullText) {
+    const blockRe = /(<!--\s*wp:paragraph(?:\s*{[\s\S]*?})?\s*-->)([\s\S]*?)(<!--\s*\/wp:paragraph\s*-->)/gi;
+
+    return fullText.replace(blockRe, function(fullMatch, openComment, innerHtml, closeComment){
+      const pRe = /(<p[^>]*>[\s\S]*?<\/p>)/gi;
+      let changed = false;
+      const newInner = innerHtml.replace(pRe, function(pMatch){
+        const temp = document.createElement('div');
+        temp.innerHTML = pMatch;
+        const p = temp.querySelector('p');
+        if (!p) return pMatch;
+
+        const text = (p.textContent || '').trim().toLowerCase();
+        if (targetPhrases.includes(text)) {
+          changed = true;
+          let attrs = '';
+          for (let i = 0; i < p.attributes.length; i++) {
+            const a = p.attributes[i];
+            attrs += ' ' + a.name + '="' + a.value + '"';
+          }
+          // Use WordPress-safe format: strong wraps mark
+          return `<p${attrs}><strong><mark style="background-color:rgba(0, 0, 0, 0)" class="has-inline-color has-vivid-purple-color">${p.textContent.trim()}</mark></strong></p>`;
+        }
+        return pMatch;
+      });
+
+      return changed ? openComment + newInner + closeComment : fullMatch;
+    });
+  }
+
+  convertBtn.addEventListener('click', function(){
+    outputEl.value = processText(inputEl.value);
+  });
+})();
+</script>
+<script src="../js/iframe-auto-resizer.js"></script>
+</body>
+</html>

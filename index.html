@@ -40,6 +40,12 @@
       <iframe src="tools/pros_table_fixer_wp.html"></iframe>
     </div>  
 
+    <h3>MISC</h3>
+    <button class="accordion-toggle" @click="open = (open === 'purple_what_do_x_say.html') ? null : 'purple_what_do_x_say.html'"> PURPLE "What do X say?" <span class="tag-wp">[WP]</span></button>
+    <div class="accordion-content" x-show="open === 'purple_what_do_x_say.html'" x-transition>
+      <iframe src="tools/purple_what_do_x_say.html"></iframe>
+    </div>
+
   </div>
 
   <script>
