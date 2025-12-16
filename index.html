@@ -18,6 +18,11 @@
     </div>
 
     <h3>ELEMENTS</h3>
+    <button class="accordion-toggle" @click="open = (open === 'cta_button_maker_wp_new') ? null : 'cta_button_maker_wp_new'"> CTA BUTTON MAKER <span class="tag-wp">[WP]</span><span class="tag-gd">[NEW!]</span></button>
+    <div class="accordion-content" x-show="open === 'cta_button_maker_wp_new'" x-transition>
+      <iframe src="tools/cta_button_maker_wp_new.html"></iframe>
+    </div>
+
     <button class="accordion-toggle" @click="open = (open === 'cta_button_maker_wp') ? null : 'cta_button_maker_wp'"> CTA BUTTON MAKER <span class="tag-wp">[WP]</span><span class="tag-old">[OLD]</span></button>
     <div class="accordion-content" x-show="open === 'cta_button_maker_wp'" x-transition>
       <iframe src="tools/cta_button_maker_wp.html"></iframe>

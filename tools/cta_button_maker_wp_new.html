@@ -1,104 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>CTA Buttons Maker [WP-NEW]</title>
-  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css" />
-  <link rel="stylesheet" href="../styles.css" />
-</head>
-<body>
-  
-  <h5>Paste the code here (from Code Editor on WP):</h5>
-  <textarea id="inputText"></textarea>
+  <head>
+    <meta charset="UTF-8" />
+    <title>CTA Buttons Maker [NEW]</title>
+    <script
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+      defer
+    ></script>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css"
+    />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <h5>Paste the code here (from Code Editor on WP):</h5>
+    <textarea id="inputText"></textarea>
 
-  <button id="convertBtn" class="within-frame-button" >Convert</button>
+    <button id="convertBtn" class="within-frame-button">Convert</button>
 
-  <h5>Paste the code from here to Code Editor on WP:</h5>
-  <textarea id="outputText"></textarea>
+    <h5>Paste the code from here to Code Editor on WP:</h5>
+    <textarea id="outputText"></textarea>
 
-<script>
-  document.getElementById('convertBtn').addEventListener('click', function () {
-    const input = document.getElementById('inputText').value;
+    <script>
+      document
+        .getElementById('convertBtn')
+        .addEventListener('click', function () {
+          const input = document.getElementById('inputText').value;
 
-    const regex =
-      /<!--\s*wp:paragraph[^>]*-->\s*<p[^>]*>\s*(?:<(strong|em|b|i|u|br)[^>]*>\s*)*<a\s+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>\s*(?:<\/\1>\s*)*(?:&nbsp;|&#160;|\s|<br\s*\/?>)*<\/p>\s*<!--\s*\/wp:paragraph\s*-->/gi;
+          const regex =
+            /<!--\s*wp:paragraph[^>]*-->\s*<p[^>]*>\s*(?:<(strong|em|b|i|u|br)[^>]*>\s*)*<a\s+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>\s*(?:<\/\1>\s*)*(?:&nbsp;|&#160;|\s|<br\s*\/?>)*<\/p>\s*<!--\s*\/wp:paragraph\s*-->/gi;
 
-    const output = input.replace(regex, (match, _, url, rawLinkText) => {
-      // Ensure exactly one link
-      const totalLinks = (match.match(/<a\s+/g) || []).length;
-      if (totalLinks !== 1) return match;
+          const output = input.replace(
+            regex,
+            (match, _, url, rawLinkText) => {
+              const totalLinks = (match.match(/<a\s+/g) || []).length;
+              if (totalLinks !== 1) return match;
 
-      /* -----------------------------
-         Clean CTA text (HTML → text)
-      ------------------------------*/
-      const temp = document.createElement('div');
-      temp.innerHTML = rawLinkText;
-      const fullText = temp.textContent.trim();
+              /* -----------------------------
+                 Clean CTA text (HTML → text)
+              ------------------------------ */
+              const temp = document.createElement('div');
+              temp.innerHTML = rawLinkText;
+              const fullText = temp.textContent.trim();
 
-      /* -----------------------------
-         Derive product name
-      ------------------------------*/
-      const stopWords = ['get', 'the', 'on', 'amazon', 'eneba'];
-      let productName = fullText
-        .split(/\s+/)
-        .filter(word => !stopWords.includes(word.toLowerCase()))
-        .join(' ')
-        .trim();
+              /* -----------------------------
+                 Derive product name
+              ------------------------------ */
+              const stopWords = ['get', 'the', 'on', 'amazon', 'eneba'];
+              const productName = fullText
+                .split(/\s+/)
+                .filter((word) => !stopWords.includes(word.toLowerCase()))
+                .join(' ')
+                .trim();
 
-      if (!productName) return match; // safety
+              if (!productName) return match;
 
-      /* -----------------------------
-         Platform logic
-      ------------------------------*/
-      const isAmazon = url.includes('amazon.');
-      const isEneba = url.includes('eneba.');
+              /* -----------------------------
+                 Platform logic
+              ------------------------------ */
+              const isAmazon = url.includes('amazon.');
+              const isEneba = url.includes('eneba.');
 
-      const ctaText = isAmazon
-        ? 'Get it on Amazon'
-        : isEneba
-        ? 'Get it on Eneba'
-        : 'Get it';
+              const ctaText = isAmazon
+                ? 'Get it on Amazon'
+                : isEneba
+                ? 'Get it on Eneba'
+                : 'Get it';
 
-      const relAttr = isAmazon
-        ? 'noreferrer noopener nofollow'
-        : 'noreferrer noopener';
+              const relAttr = isAmazon
+                ? 'noreferrer noopener nofollow'
+                : 'noreferrer noopener';
 
-      /* -----------------------------
-         Winner Badge output
-      ------------------------------*/
-      const lines = [];
+              /* -----------------------------
+                 Winner Badge output (Gutenberg-perfect)
+              ------------------------------ */
+            const blockAttrs = {
+            productName,
+            ribbonText: '',
+            ctaText,
+            ctaLink: url, // raw URL, no forced escapes
+            };
+            if (isEneba) {
+            blockAttrs.allowFollow = true;
+            }
 
-      lines.push(
-        `<!-- wp:eneba/winner-badge {"productName":"${productName}","ribbonText":"","ctaText":"${ctaText}","ctaLink":"${url.replace(/&/g, '\\u0026')}"} -->`
-      );
-      lines.push('<div class="wp-block-eneba-winner-badge">');
-      lines.push('  <div class="wp-block-eneba-winner-badge-ribbon">★ Winner</div>');
-      lines.push('  <div class="wp-block-eneba-winner-badge-content">');
-      lines.push('    <div class="wp-block-eneba-winner-badge-product-container">');
-      lines.push(
-        `      <div class="wp-block-eneba-winner-badge-product-name">${productName}</div>`
-      );
-      lines.push('    </div>');
-      lines.push('    <div class="wp-block-eneba-winner-badge-cta-container">');
-      lines.push(
-        `      <a href="${url}" class="wp-block-eneba-winner-badge-cta" target="_blank" rel="${relAttr}">`
-      );
-      lines.push(
-        `        <span class="wp-block-eneba-winner-badge-cta-text">${ctaText}</span>`
-      );
-      lines.push('      </a>');
-      lines.push('    </div>');
-      lines.push('  </div>');
-      lines.push('</div>');
-      lines.push('<!-- /wp:eneba/winner-badge -->');
+            // Winner badge HTML
+            const badgeHtml =
+            `<!-- wp:eneba/winner-badge ${JSON.stringify(blockAttrs)} -->` +
+            `<div class="wp-block-eneba-winner-badge"><div class="wp-block-eneba-winner-badge-ribbon">★ Winner</div><div class="wp-block-eneba-winner-badge-content"><div class="wp-block-eneba-winner-badge-product-container"><div class="wp-block-eneba-winner-badge-product-name">${productName}</div></div><div class="wp-block-eneba-winner-badge-cta-container"><a href="${url}" class="wp-block-eneba-winner-badge-cta" target="_blank" rel="${relAttr}"><span class="wp-block-eneba-winner-badge-cta-text">${ctaText}</span></a></div></div></div>` +
+            `<!-- /wp:eneba/winner-badge -->`;
 
-      return lines.join('\n');
-    });
+            return badgeHtml;
 
-    document.getElementById('outputText').value = output;
-  });
-</script>
-  <script src="../js/iframe-auto-resizer.js"></script>
-</body>
+            }
+          );
+
+          document.getElementById('outputText').value = output;
+        });
+    </script>
+    <script src="../js/iframe-auto-resizer.js"></script>
+  </body>
 </html>

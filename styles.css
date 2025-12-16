@@ -47,13 +47,15 @@ h5 {
   padding: 2px 6px;
   border-radius: 4px;
   color: rgb(217, 255, 0);
+  margin-right: 6px; /* space after this tag */
 }
 
 .tag-gd {
   background-color: rgba(243, 137, 255, 0.1);
   padding: 2px 6px;
   border-radius: 4px;
-  color: rgb(172, 248, 255);
+  color: rgb(255, 234, 0);
+  text-shadow: 0 0 8px rgb(255, 242, 56);
 }
 
 .tag-old {
