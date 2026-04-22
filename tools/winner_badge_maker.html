@@ -101,6 +101,20 @@
           return url.replace(/&/g, '&amp;');
         }
 
+        // Eneba links are dofollow; everything else is nofollow.
+        // Matches the host (anywhere in the URL) so subdomains and
+        // country prefixes like www.eneba.com / eneba.com/us all hit.
+        function isEnebaUrl(url) {
+          return /(?:^|\/\/|\.)eneba\.com(?:[\/?#]|$)/i.test(url);
+        }
+
+        // Build the rel attribute for a CTA based on the link target.
+        function relFor(url) {
+          return isEnebaUrl(url)
+            ? 'noreferrer noopener'
+            : 'noreferrer noopener nofollow';
+        }
+
         // Verify the first row marks this table as a Winner Badge.
         // Accepts either a single merged cell or multiple cells —
         // we only require the FIRST cell's text (rich text stripped,
@@ -133,6 +147,8 @@
 
         function buildNormal(data) {
           // data: { ribbonText, trim, productName, ctaText, ctaLink }
+          const allowFollow = isEnebaUrl(data.ctaLink);
+
           const attrs = {
             productName: data.productName,
             ribbonText: data.ribbonText,
@@ -140,6 +156,7 @@
           if (data.trim === 'silver') attrs.trim = 'silver';
           attrs.ctaText = data.ctaText;
           attrs.ctaLink = data.ctaLink;
+          if (allowFollow) attrs.allowFollow = true;
 
           const wrapperClass =
             data.trim === 'silver'
@@ -155,7 +172,7 @@
                   `<div class="wp-block-eneba-winner-badge-product-name">${data.productName}</div>` +
                 `</div>` +
                 `<div class="wp-block-eneba-winner-badge-cta-container">` +
-                  `<a href="${hrefForHtml(data.ctaLink)}" class="wp-block-eneba-winner-badge-cta" target="_blank" rel="noreferrer noopener nofollow">` +
+                  `<a href="${hrefForHtml(data.ctaLink)}" class="wp-block-eneba-winner-badge-cta" target="_blank" rel="${relFor(data.ctaLink)}">` +
                     `<span class="wp-block-eneba-winner-badge-cta-text">${data.ctaText}</span>` +
                   `</a>` +
                 `</div>` +
@@ -166,7 +183,10 @@
         }
 
         function buildTwoLayer(data) {
-          // data: { ribbonText, trim, top:{name,ctaText,ctaLink,ctaLinkRaw}, bottom:{...} }
+          // data: { ribbonText, trim, top:{name,ctaText,ctaLink}, bottom:{...} }
+          const topAllowFollow = isEnebaUrl(data.top.ctaLink);
+          const bottomAllowFollow = isEnebaUrl(data.bottom.ctaLink);
+
           const attrs = {
             ribbonText: data.ribbonText,
           };
@@ -174,9 +194,11 @@
           attrs.topProductName = data.top.name;
           attrs.topCtaText = data.top.ctaText;
           attrs.topCtaLink = data.top.ctaLink;
+          if (topAllowFollow) attrs.topAllowFollow = true;
           attrs.bottomProductName = data.bottom.name;
           attrs.bottomCtaText = data.bottom.ctaText;
           attrs.bottomCtaLink = data.bottom.ctaLink;
+          if (bottomAllowFollow) attrs.bottomAllowFollow = true;
 
           const wrapperClass =
             data.trim === 'silver'
@@ -189,7 +211,7 @@
                 `<div class="wp-block-eneba-winner-badge-two-layer-product-name">${item.name}</div>` +
               `</div>` +
               `<div class="wp-block-eneba-winner-badge-two-layer-cta-container">` +
-                `<a href="${hrefForHtml(item.ctaLink)}" class="wp-block-eneba-winner-badge-two-layer-cta" target="_blank" rel="noreferrer noopener nofollow">` +
+                `<a href="${hrefForHtml(item.ctaLink)}" class="wp-block-eneba-winner-badge-two-layer-cta" target="_blank" rel="${relFor(item.ctaLink)}">` +
                   `<span class="wp-block-eneba-winner-badge-two-layer-cta-text">${item.ctaText}</span>` +
                 `</a>` +
               `</div>` +
@@ -208,14 +230,19 @@
         }
 
         function buildDouble(data) {
-          // data: { trim, left:{ctaText,ctaLink,ctaLinkRaw}, right:{...} }
+          // data: { trim, left:{ctaText,ctaLink}, right:{...} }
           // Note: Double Button ignores ribbon text — always "★ Winner".
+          const leftAllowFollow = isEnebaUrl(data.left.ctaLink);
+          const rightAllowFollow = isEnebaUrl(data.right.ctaLink);
+
           const attrs = {};
           if (data.trim === 'silver') attrs.trim = 'silver';
           attrs.leftCtaText = data.left.ctaText;
           attrs.leftCtaLink = data.left.ctaLink;
+          if (leftAllowFollow) attrs.leftAllowFollow = true;
           attrs.rightCtaText = data.right.ctaText;
           attrs.rightCtaLink = data.right.ctaLink;
+          if (rightAllowFollow) attrs.rightAllowFollow = true;
 
           const wrapperClass =
             data.trim === 'silver'
@@ -224,7 +251,7 @@
 
           const ctaContainer = (item) =>
             `<div class="wp-block-eneba-winner-badge-double-cta-container">` +
-              `<a href="${hrefForHtml(item.ctaLink)}" class="wp-block-eneba-winner-badge-double-cta" target="_blank" rel="noreferrer noopener nofollow">` +
+              `<a href="${hrefForHtml(item.ctaLink)}" class="wp-block-eneba-winner-badge-double-cta" target="_blank" rel="${relFor(item.ctaLink)}">` +
                 `<span class="wp-block-eneba-winner-badge-double-cta-text">${item.ctaText}</span>` +
               `</a>` +
             `</div>`;
