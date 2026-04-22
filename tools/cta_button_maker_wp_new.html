@@ -23,81 +23,346 @@
     <textarea id="outputText"></textarea>
 
     <script>
-      document
-        .getElementById('convertBtn')
-        .addEventListener('click', function () {
-          const input = document.getElementById('inputText').value;
+      /* =========================================================
+         CTA Buttons Maker — Winner Badge converter
+         ---------------------------------------------------------
+         Detects three Winner Badge table variants inside WP
+         Gutenberg `wp:table` blocks and replaces them with the
+         appropriate `wp:eneba/winner-badge*` block markup.
 
-          const regex =
-            /<!--\s*wp:paragraph[^>]*-->\s*<p[^>]*>\s*(?:<(strong|em|b|i|u|br)[^>]*>\s*)*<a\s+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>\s*(?:<\/\1>\s*)*(?:&nbsp;|&#160;|\s|<br\s*\/?>)*<\/p>\s*<!--\s*\/wp:paragraph\s*-->/gi;
+         Variants:
+           1. Normal Winner Badge       → wp:eneba/winner-badge
+           2. Two Layer Winner Badge    → wp:eneba/winner-badge-two-layer
+           3. Double Button Winner Badge→ wp:eneba/winner-badge-double
 
-          const output = input.replace(
-            regex,
-            (match, _, url, rawLinkText) => {
-              const totalLinks = (match.match(/<a\s+/g) || []).length;
-              if (totalLinks !== 1) return match;
+         Anything that does not match cleanly is left untouched.
+         ========================================================= */
 
-              /* -----------------------------
-                 Clean CTA text (HTML → text)
-              ------------------------------ */
-              const temp = document.createElement('div');
-              temp.innerHTML = rawLinkText;
-              const fullText = temp.textContent.trim();
+      (function () {
+        /* ------------------------------------------------------
+           Regex: find wp:table blocks (non-greedy, multi-line).
+           We only locate them — actual parsing is done with the
+           DOM so we don't have to fight HTML with regex.
+           ------------------------------------------------------ */
+        const TABLE_BLOCK_REGEX =
+          /<!--\s*wp:table\s*-->[\s\S]*?<!--\s*\/wp:table\s*-->/gi;
 
-              /* -----------------------------
-                 Derive product name
-              ------------------------------ */
-              const stopWords = ['get', 'the', 'on', 'amazon', 'eneba'];
-              const productName = fullText
-                .split(/\s+/)
-                .filter((word) => !stopWords.includes(word.toLowerCase()))
-                .join(' ')
-                .trim();
+        /* ------------------------------------------------------
+           Helpers
+           ------------------------------------------------------ */
 
-              if (!productName) return match;
+        // Strip all HTML tags from a string and return the trimmed
+        // plain text content. Uses the DOM so entities decode too.
+        function stripToText(html) {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = html;
+          return (tmp.textContent || '').trim();
+        }
 
-              /* -----------------------------
-                 Platform logic
-              ------------------------------ */
-              const isAmazon = url.includes('amazon.');
-              const isEneba = url.includes('eneba.');
 
-              const ctaText = isAmazon
-                ? 'Shop on Amazon'
-                : isEneba
-                ? 'Shop on Eneba'
-                : 'Get it';
+        // Determine ribbon trim color from a cell's text.
+        // Rules: if "silver" appears (case-insensitive) → silver.
+        // Else if "gold" appears → gold. Else default to gold.
+        function detectTrim(cellText) {
+          const t = cellText.toLowerCase();
+          const hasSilver = /\bsilver\b/.test(t);
+          const hasGold = /\bgold\b/.test(t);
+          if (hasSilver && !hasGold) return 'silver';
+          return 'gold'; // gold-only, both, or neither → gold
+        }
 
-              const relAttr = isAmazon
-                ? 'noreferrer noopener nofollow'
-                : 'noreferrer noopener';
+        // Check whether a cell contains exactly one <a> element and
+        // nothing else of substance (only the link's text). Returns
+        // { href, text } if valid, otherwise null.
+        // `href` is the decoded URL (suitable for JSON); the raw
+        // HTML-attribute form is reconstructed at output time by
+        // re-encoding '&' as '&amp;'.
+        function extractSoloLink(cellEl) {
+          const anchors = cellEl.querySelectorAll('a');
+          if (anchors.length !== 1) return null;
 
-              /* -----------------------------
-                 Winner Badge output (Gutenberg-perfect)
-              ------------------------------ */
-            const blockAttrs = {
-            productName,
-            ribbonText: '',
-            ctaText,
-            ctaLink: url, // raw URL, no forced escapes
-            };
-            if (isEneba) {
-            blockAttrs.allowFollow = true;
-            }
+          const a = anchors[0];
+          const href = a.getAttribute('href');
+          if (!href) return null;
 
-            // Winner badge HTML
-            const badgeHtml =
-            `<!-- wp:eneba/winner-badge ${JSON.stringify(blockAttrs)} -->` +
-            `<div class="wp-block-eneba-winner-badge"><div class="wp-block-eneba-winner-badge-ribbon">★ Winner</div><div class="wp-block-eneba-winner-badge-content"><div class="wp-block-eneba-winner-badge-product-container"><div class="wp-block-eneba-winner-badge-product-name">${productName}</div></div><div class="wp-block-eneba-winner-badge-cta-container"><a href="${url}" class="wp-block-eneba-winner-badge-cta" target="_blank" rel="${relAttr}"><span class="wp-block-eneba-winner-badge-cta-text">${ctaText}</span></a></div></div></div>` +
-            `<!-- /wp:eneba/winner-badge -->`;
+          // Make sure the cell's text equals the link's text — i.e.
+          // there is no extra prose around the link.
+          const cellText = (cellEl.textContent || '').trim();
+          const linkText = (a.textContent || '').trim();
+          if (!linkText) return null;
+          if (cellText !== linkText) return null;
 
-            return badgeHtml;
+          return { href: href, text: linkText };
+        }
 
-            }
+        // Convert a decoded URL (raw '&') into the form used inside
+        // an HTML attribute (`&amp;`). Other chars in URLs are safe.
+        function hrefForHtml(url) {
+          return url.replace(/&/g, '&amp;');
+        }
+
+        // Verify the first row marks this table as a Winner Badge.
+        // Accepts either a single merged cell or multiple cells —
+        // we only require the FIRST cell's text (rich text stripped,
+        // case-insensitive, trimmed) to equal "winner badge".
+        function isWinnerBadgeHeader(firstRow) {
+          const firstCell = firstRow.querySelector('td, th');
+          if (!firstCell) return false;
+          const text = (firstCell.textContent || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+          return text === 'winner badge';
+        }
+
+        /* ------------------------------------------------------
+           Builders — each returns the full Gutenberg block string
+           for a given variant. Kept separate so they're easy to
+           tweak independently.
+           ------------------------------------------------------ */
+
+        // Serialize block attributes the same way Gutenberg does:
+        // standard JSON, but with `&`, `<`, `>` escaped as `\uXXXX`
+        // so the JSON is safe to embed inside an HTML comment.
+        function serializeAttrs(attrs) {
+          return JSON.stringify(attrs)
+            .replace(/&/g, '\\u0026')
+            .replace(/</g, '\\u003c')
+            .replace(/>/g, '\\u003e');
+        }
+
+        function buildNormal(data) {
+          // data: { ribbonText, trim, productName, ctaText, ctaLink }
+          const attrs = {
+            productName: data.productName,
+            ribbonText: data.ribbonText,
+          };
+          if (data.trim === 'silver') attrs.trim = 'silver';
+          attrs.ctaText = data.ctaText;
+          attrs.ctaLink = data.ctaLink;
+
+          const wrapperClass =
+            data.trim === 'silver'
+              ? 'wp-block-eneba-winner-badge wp-block-eneba-winner-badge-silver'
+              : 'wp-block-eneba-winner-badge';
+
+          return (
+            `<!-- wp:eneba/winner-badge ${serializeAttrs(attrs)} -->\n` +
+            `<div class="${wrapperClass}">` +
+              `<div class="wp-block-eneba-winner-badge-ribbon">★ ${data.ribbonText}</div>` +
+              `<div class="wp-block-eneba-winner-badge-content">` +
+                `<div class="wp-block-eneba-winner-badge-product-container">` +
+                  `<div class="wp-block-eneba-winner-badge-product-name">${data.productName}</div>` +
+                `</div>` +
+                `<div class="wp-block-eneba-winner-badge-cta-container">` +
+                  `<a href="${hrefForHtml(data.ctaLink)}" class="wp-block-eneba-winner-badge-cta" target="_blank" rel="noreferrer noopener nofollow">` +
+                    `<span class="wp-block-eneba-winner-badge-cta-text">${data.ctaText}</span>` +
+                  `</a>` +
+                `</div>` +
+              `</div>` +
+            `</div>\n` +
+            `<!-- /wp:eneba/winner-badge -->`
+          );
+        }
+
+        function buildTwoLayer(data) {
+          // data: { ribbonText, trim, top:{name,ctaText,ctaLink,ctaLinkRaw}, bottom:{...} }
+          const attrs = {
+            ribbonText: data.ribbonText,
+          };
+          if (data.trim === 'silver') attrs.trim = 'silver';
+          attrs.topProductName = data.top.name;
+          attrs.topCtaText = data.top.ctaText;
+          attrs.topCtaLink = data.top.ctaLink;
+          attrs.bottomProductName = data.bottom.name;
+          attrs.bottomCtaText = data.bottom.ctaText;
+          attrs.bottomCtaLink = data.bottom.ctaLink;
+
+          const wrapperClass =
+            data.trim === 'silver'
+              ? 'wp-block-eneba-winner-badge-two-layer wp-block-eneba-winner-badge-two-layer-silver'
+              : 'wp-block-eneba-winner-badge-two-layer';
+
+          const row = (item) =>
+            `<div class="wp-block-eneba-winner-badge-two-layer-row">` +
+              `<div class="wp-block-eneba-winner-badge-two-layer-product-container">` +
+                `<div class="wp-block-eneba-winner-badge-two-layer-product-name">${item.name}</div>` +
+              `</div>` +
+              `<div class="wp-block-eneba-winner-badge-two-layer-cta-container">` +
+                `<a href="${hrefForHtml(item.ctaLink)}" class="wp-block-eneba-winner-badge-two-layer-cta" target="_blank" rel="noreferrer noopener nofollow">` +
+                  `<span class="wp-block-eneba-winner-badge-two-layer-cta-text">${item.ctaText}</span>` +
+                `</a>` +
+              `</div>` +
+            `</div>`;
+
+          return (
+            `<!-- wp:eneba/winner-badge-two-layer ${serializeAttrs(attrs)} -->\n` +
+            `<div class="${wrapperClass}">` +
+              `<div class="wp-block-eneba-winner-badge-two-layer-ribbon">★ ${data.ribbonText}</div>` +
+              row(data.top) +
+              `<div class="wp-block-eneba-winner-badge-two-layer-divider"></div>` +
+              row(data.bottom) +
+            `</div>\n` +
+            `<!-- /wp:eneba/winner-badge-two-layer -->`
+          );
+        }
+
+        function buildDouble(data) {
+          // data: { trim, left:{ctaText,ctaLink,ctaLinkRaw}, right:{...} }
+          // Note: Double Button ignores ribbon text — always "★ Winner".
+          const attrs = {};
+          if (data.trim === 'silver') attrs.trim = 'silver';
+          attrs.leftCtaText = data.left.ctaText;
+          attrs.leftCtaLink = data.left.ctaLink;
+          attrs.rightCtaText = data.right.ctaText;
+          attrs.rightCtaLink = data.right.ctaLink;
+
+          const wrapperClass =
+            data.trim === 'silver'
+              ? 'wp-block-eneba-winner-badge-double wp-block-eneba-winner-badge-double-silver'
+              : 'wp-block-eneba-winner-badge-double';
+
+          const ctaContainer = (item) =>
+            `<div class="wp-block-eneba-winner-badge-double-cta-container">` +
+              `<a href="${hrefForHtml(item.ctaLink)}" class="wp-block-eneba-winner-badge-double-cta" target="_blank" rel="noreferrer noopener nofollow">` +
+                `<span class="wp-block-eneba-winner-badge-double-cta-text">${item.ctaText}</span>` +
+              `</a>` +
+            `</div>`;
+
+          // The block-comment attrs object is empty `{}` only when
+          // there are no keys at all; if so, omit the JSON entirely
+          // to match Gutenberg's preferred output for default blocks.
+          const attrsStr = Object.keys(attrs).length
+            ? ' ' + serializeAttrs(attrs)
+            : '';
+
+          return (
+            `<!-- wp:eneba/winner-badge-double${attrsStr} -->\n` +
+            `<div class="${wrapperClass}">` +
+              `<div class="wp-block-eneba-winner-badge-double-ribbon">★ Winner</div>` +
+              `<div class="wp-block-eneba-winner-badge-double-content">` +
+                ctaContainer(data.left) +
+                ctaContainer(data.right) +
+              `</div>` +
+            `</div>\n` +
+            `<!-- /wp:eneba/winner-badge-double -->`
+          );
+        }
+
+        /* ------------------------------------------------------
+           Main per-table converter. Returns either the new block
+           string or null (meaning: leave the original untouched).
+           ------------------------------------------------------ */
+        function convertTable(tableBlockHtml) {
+          // Parse the table block as HTML so we can walk rows/cells.
+          const parser = new DOMParser();
+          // Wrap in a body so DOMParser handles fragments cleanly.
+          const doc = parser.parseFromString(
+            `<!DOCTYPE html><body>${tableBlockHtml}</body>`,
+            'text/html'
           );
 
-          document.getElementById('outputText').value = output;
-        });
+          const table = doc.querySelector('table');
+          if (!table) return null;
+
+          // Collect direct rows. Use tbody if present, else table.
+          const rows = Array.from(table.querySelectorAll('tr'));
+          if (rows.length < 3 || rows.length > 4) return null;
+
+          // Verify first row is the WINNER BADGE header.
+          if (!isWinnerBadgeHeader(rows[0])) return null;
+
+          // ---- Row 2: ribbon text + ribbon color ----
+          const row2Cells = rows[1].querySelectorAll('td');
+          if (row2Cells.length !== 2) return null;
+          const ribbonText = stripToText(row2Cells[0].innerHTML);
+          if (!ribbonText) return null;
+          const trim = detectTrim(stripToText(row2Cells[1].innerHTML));
+
+          /* -----------------------------
+             Branch by total row count.
+          ------------------------------ */
+          if (rows.length === 3) {
+            // Could be Normal OR Double Button. Disambiguate by
+            // checking whether BOTH cells of row 3 contain links.
+            const row3Cells = rows[2].querySelectorAll('td');
+            if (row3Cells.length !== 2) return null;
+
+            const leftHasLink = !!row3Cells[0].querySelector('a');
+            const rightHasLink = !!row3Cells[1].querySelector('a');
+
+            if (leftHasLink && rightHasLink) {
+              // ----- Double Button -----
+              const left = extractSoloLink(row3Cells[0]);
+              const right = extractSoloLink(row3Cells[1]);
+              if (!left || !right) return null;
+
+              return buildDouble({
+                trim: trim,
+                left:  { ctaText: left.text,  ctaLink: left.href  },
+                right: { ctaText: right.text, ctaLink: right.href },
+              });
+            } else if (!leftHasLink && rightHasLink) {
+              // ----- Normal Winner Badge -----
+              const productName = stripToText(row3Cells[0].innerHTML);
+              if (!productName) return null;
+              const cta = extractSoloLink(row3Cells[1]);
+              if (!cta) return null;
+
+              return buildNormal({
+                ribbonText: ribbonText,
+                trim: trim,
+                productName: productName,
+                ctaText: cta.text,
+                ctaLink: cta.href,
+              });
+            } else {
+              // Anything else (no links, or only left has link) → skip.
+              return null;
+            }
+          }
+
+          if (rows.length === 4) {
+            // ----- Two Layer Winner Badge -----
+            const row3Cells = rows[2].querySelectorAll('td');
+            const row4Cells = rows[3].querySelectorAll('td');
+            if (row3Cells.length !== 2 || row4Cells.length !== 2) return null;
+
+            const topName = stripToText(row3Cells[0].innerHTML);
+            const bottomName = stripToText(row4Cells[0].innerHTML);
+            if (!topName || !bottomName) return null;
+
+            const topCta = extractSoloLink(row3Cells[1]);
+            const bottomCta = extractSoloLink(row4Cells[1]);
+            if (!topCta || !bottomCta) return null;
+
+            return buildTwoLayer({
+              ribbonText: ribbonText,
+              trim: trim,
+              top:    { name: topName,    ctaText: topCta.text,    ctaLink: topCta.href    },
+              bottom: { name: bottomName, ctaText: bottomCta.text, ctaLink: bottomCta.href },
+            });
+          }
+
+          return null;
+        }
+
+        /* ------------------------------------------------------
+           Wire up the button.
+           ------------------------------------------------------ */
+        document
+          .getElementById('convertBtn')
+          .addEventListener('click', function () {
+            const input = document.getElementById('inputText').value;
+
+            const output = input.replace(TABLE_BLOCK_REGEX, function (match) {
+              const replacement = convertTable(match);
+              return replacement === null ? match : replacement;
+            });
+
+            document.getElementById('outputText').value = output;
+          });
+      })();
     </script>
     <script src="../js/iframe-auto-resizer.js"></script>
   </body>
