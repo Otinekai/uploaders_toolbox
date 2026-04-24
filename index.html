@@ -18,7 +18,7 @@
     </div>
 
     <h3>ELEMENTS</h3>
-    <button class="accordion-toggle" @click="open = (open === 'winner_badge_maker') ? null : 'winner_badge_maker'"> WINNER BADGE MAKER<span class="tag-new">[NEW! - 22/04/26]</span></button>
+    <button class="accordion-toggle" @click="open = (open === 'winner_badge_maker') ? null : 'winner_badge_maker'"> WINNER BADGE MAKER <span class="tag-new">[NEW! - 22/04/26]</span></button>
     <div class="accordion-content" x-show="open === 'winner_badge_maker'" x-transition>
       <iframe src="tools/winner_badge_maker.html"></iframe>
     </div>
@@ -26,6 +26,11 @@
     <button class="accordion-toggle" @click="open = (open === 'trust_bubble_maker_wp') ? null : 'trust_bubble_maker_wp'"> TRUST BUBBLE MAKER</button>
     <div class="accordion-content" x-show="open === 'trust_bubble_maker_wp'" x-transition>
       <iframe src="tools/trust_bubble_maker_wp.html"></iframe>
+    </div>
+
+    <button class="accordion-toggle" @click="open = (open === 'yoast_faq_maker') ? null : 'yoast_faq_maker'"> YOAST FAQ MAKER <span class="tag-new">[NEW! - 24/04/26]</span></button>
+    <div class="accordion-content" x-show="open === 'yoast_faq_maker'" x-transition>
+      <iframe src="tools/yoast_faq_maker.html"></iframe>
     </div>
 
     <h3>IMAGES</h3>
@@ -38,7 +43,7 @@
     <button class="accordion-toggle" @click="open = (open === 'pros_table_fixer_wp') ? null : 'pros_table_fixer_wp'"> PROS TABLE FIXER</button>
     <div class="accordion-content" x-show="open === 'pros_table_fixer_wp'" x-transition>
       <iframe src="tools/pros_table_fixer_wp.html"></iframe>
-    </div>  
+    </div>
 
     <h3>MISC</h3>
     <button class="accordion-toggle" @click="open = (open === 'purple_what_do_x_say.html') ? null : 'purple_what_do_x_say.html'"> PURPLE "What do X say?"</button>

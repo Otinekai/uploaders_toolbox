@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FAQ → Yoast Schema Converter</title>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.pumpkin.min.css" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+
+  <h5>Paste the code here (from Code Editor on WP):</h5>
+  <textarea id="input"></textarea>
+
+  <button class="within-frame-button" id="convert">Convert</button>
+
+  <h5>Paste the code from here to Code Editor on WP:</h5>
+  <textarea id="output"></textarea>
+
+<script>
+(function(){
+  'use strict';
+
+  const inputEl = document.getElementById('input');
+  const outputEl = document.getElementById('output');
+  const convertBtn = document.getElementById('convert');
+
+  // ---------------------------------------------------------------------------
+  // CONFIG: Inline elements supported inside FAQ answers.
+  // To add support for more inline tags later (e.g. 'a', 'code', 'mark'),
+  // just add them to this Set. The parser will automatically:
+  //   - Preserve them in the HTML answer string (jsonAnswer)
+  //   - Convert them into Yoast's structured form: {type, props:{children:[...]}}
+  // For tags with attributes (like <a href>), see the note in inlineToStructured().
+  // <br> is special-cased (void element, no children) but is included here.
+  // ---------------------------------------------------------------------------
+  const SUPPORTED_INLINE_TAGS = new Set(['em', 'strong', 'br']);
+  const VOID_INLINE_TAGS = new Set(['br']);
+
+  // Words that, when starting an H2, suggest the writer mistakenly used H2
+  // instead of H3 for an FAQ question. Combined with a "?" check.
+  const QUESTION_STARTERS = new Set([
+    'what','how','why','when','where','which','who','whom','whose',
+    'can','could','do','does','did','is','are','was','were',
+    'will','would','should','shall','may','might','must','have','has','had'
+  ]);
+
+  // -------------------------- Helpers ---------------------------------------
+
+  function decodeEntities(str) {
+    const t = document.createElement('textarea');
+    t.innerHTML = str;
+    return t.value;
+  }
+
+  // Strip the FAQ heading text down to a clean comparable form (case-insensitive,
+  // tags removed, whitespace collapsed). Handles rich text like <strong>FAQs</strong>.
+  function normalizeHeadingText(html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return (tmp.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function isFaqHeading(text) {
+    // Matches "FAQ", "FAQs", "F.A.Q.", "Frequently Asked Questions", etc.
+    const t = text.replace(/[.\s]/g, '');
+    return t === 'faq' || t === 'faqs' || text === 'frequently asked questions';
+  }
+
+  // Heuristic: does this H2 text look like an FAQ question that was mistakenly
+  // typed as H2 instead of H3? (Ends with "?" OR starts with a question word.)
+  function looksLikeQuestion(text) {
+    const t = text.trim();
+    if (!t) return false;
+    if (t.endsWith('?')) return true;
+    const firstWord = t.split(/\s+/)[0].toLowerCase().replace(/[^a-z]/g, '');
+    return QUESTION_STARTERS.has(firstWord);
+  }
+
+  // Extract list items from a wp:list block's inner HTML.
+  // Returns an array of HTML strings (one per <li>), preserving inline tags.
+  function extractListItems(innerHtml) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = innerHtml;
+    const items = [];
+    tmp.querySelectorAll('li').forEach(li => {
+      const html = li.innerHTML.trim();
+      if (html) items.push(html);
+    });
+    return items;
+  }
+
+  // Extract concatenated text from a quote/pullquote block. Multiple paragraphs
+  // inside the quote get joined with <br/> (kept as a literal HTML marker that
+  // inlineToStructured/inlineToHtmlString will turn into a <br> node).
+  function extractQuoteText(innerHtml) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = innerHtml;
+    const paras = tmp.querySelectorAll('p');
+    if (paras.length === 0) return tmp.innerHTML.trim();
+    return Array.from(paras).map(p => p.innerHTML.trim()).filter(Boolean).join('<br/>');
+  }
+
+  // -------------------------- Block parsing ---------------------------------
+
+  // Parse the full input into a flat list of Gutenberg blocks.
+  // Each block: { kind:'block', type, attrsRaw, innerHtml, raw, selfClose }
+  //          or  { kind:'gap', raw }
+  //
+  // We only deeply care about wp:heading, wp:paragraph, wp:list, wp:quote;
+  // everything else is kept as opaque "raw" so we can stitch the document back
+  // together unchanged. Some blocks (like wp:list) contain nested blocks
+  // (wp:list-item), so we track nesting depth by matching open/close comments.
+  function parseBlocks(text) {
+    const blocks = [];
+    // Token pattern: any block opener (incl. self-closing) or any closer.
+    const tokenRe = /<!--\s*(\/)?wp:([a-zA-Z0-9\/-]+)(\s*\{[\s\S]*?\})?\s*(\/)?-->/g;
+
+    let lastIndex = 0;
+    let m;
+
+    while ((m = tokenRe.exec(text)) !== null) {
+      const isCloser = !!m[1];
+      const type = m[2];
+      const attrsRaw = m[3] || '';
+      const isSelfClose = !!m[4];
+
+      if (isCloser) {
+        // Stray closer at the top level — treat as a gap.
+        continue;
+      }
+
+      // Capture any text between the previous block and this opener as a gap.
+      if (m.index > lastIndex) {
+        const between = text.slice(lastIndex, m.index);
+        if (between.length) blocks.push({ kind: 'gap', raw: between });
+      }
+
+      const openerEnd = m.index + m[0].length;
+
+      if (isSelfClose) {
+        blocks.push({
+          kind: 'block',
+          type,
+          attrsRaw,
+          innerHtml: '',
+          raw: text.slice(m.index, openerEnd),
+          selfClose: true
+        });
+        lastIndex = openerEnd;
+        tokenRe.lastIndex = openerEnd;
+        continue;
+      }
+
+      // Find the matching closer for this top-level block, respecting nesting.
+      // We scan forward, incrementing depth on each opener of the SAME type
+      // and decrementing on each closer of the SAME type.
+      const innerRe = new RegExp(
+        '<!--\\s*(\\/)?wp:' + type.replace(/[-\/]/g, '\\$&') + '(?:\\s*\\{[\\s\\S]*?\\})?\\s*(\\/)?-->',
+        'g'
+      );
+      innerRe.lastIndex = openerEnd;
+      let depth = 1;
+      let closerEnd = -1;
+      let inner;
+      while ((inner = innerRe.exec(text)) !== null) {
+        const innerIsSelfClose = !!inner[2];
+        const innerIsCloser = !!inner[1];
+        if (innerIsSelfClose) continue; // self-closing of same type doesn't change depth
+        if (innerIsCloser) {
+          depth--;
+          if (depth === 0) {
+            closerEnd = inner.index + inner[0].length;
+            break;
+          }
+        } else {
+          depth++;
+        }
+      }
+
+      if (closerEnd === -1) {
+        // Unbalanced — treat the rest of the document as this block's content.
+        closerEnd = text.length;
+      }
+
+      const closerMatch = text.slice(0, closerEnd).match(
+        new RegExp('<!--\\s*\\/wp:' + type.replace(/[-\/]/g, '\\$&') + '\\s*-->\\s*$')
+      );
+      const innerStart = openerEnd;
+      const innerEnd = closerMatch
+        ? closerEnd - closerMatch[0].length
+        : closerEnd;
+
+      blocks.push({
+        kind: 'block',
+        type,
+        attrsRaw,
+        innerHtml: text.slice(innerStart, innerEnd),
+        raw: text.slice(m.index, closerEnd),
+        selfClose: false
+      });
+
+      lastIndex = closerEnd;
+      tokenRe.lastIndex = closerEnd;
+    }
+
+    if (lastIndex < text.length) {
+      blocks.push({ kind: 'gap', raw: text.slice(lastIndex) });
+    }
+
+    return blocks;
+  }
+
+  // Get heading level from a wp:heading block. Default is 2.
+  function getHeadingLevel(block) {
+    if (!block.attrsRaw) return 2;
+    const m = block.attrsRaw.match(/"level"\s*:\s*(\d+)/);
+    return m ? parseInt(m[1], 10) : 2;
+  }
+
+  // Extract the inner HTML of the heading's <h*> tag.
+  function getHeadingInnerHtml(block) {
+    const m = block.innerHtml.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i);
+    return m ? m[1] : '';
+  }
+
+  // Extract inner HTML of the paragraph's <p> tag.
+  function getParagraphInnerHtml(block) {
+    const m = block.innerHtml.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+    return m ? m[1] : '';
+  }
+
+  // -------------------------- Yoast structured answer -----------------------
+
+  // Convert an HTML fragment into Yoast's `answer` array structure.
+  // Plain text becomes string entries; supported inline tags become objects:
+  //   { type: 'em', props: { children: ['...'] } }
+  //
+  // NOTE on attributes: Yoast's structured form supports props like href for <a>.
+  // To add that later: in the element branch below, copy attributes into
+  // `props` (e.g. props.href = node.getAttribute('href')) before children.
+  function inlineToStructured(html) {
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+
+    const out = [];
+    wrapper.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (node.textContent.length) out.push(node.textContent);
+        return;
+      }
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const tag = node.tagName.toLowerCase();
+        if (SUPPORTED_INLINE_TAGS.has(tag)) {
+          out.push({
+            type: tag,
+            props: { children: inlineToStructured(node.innerHTML) }
+          });
+        } else {
+          // Unsupported tag: fall back to its text content so we don't lose words.
+          if (node.textContent.length) out.push(node.textContent);
+        }
+        return;
+      }
+      // Ignore comments/other node types.
+    });
+
+    return out;
+  }
+
+  // Build the HTML-string form of the answer (jsonAnswer), keeping only
+  // supported inline tags and stripping anything else down to text.
+  function inlineToHtmlString(html) {
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+
+    function serialize(nodes) {
+      let out = '';
+      nodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          out += node.textContent;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          const tag = node.tagName.toLowerCase();
+          if (SUPPORTED_INLINE_TAGS.has(tag)) {
+            if (VOID_INLINE_TAGS.has(tag)) {
+              out += `<${tag}/>`;
+            } else {
+              // No attributes serialized for em/strong. If you add tags with
+              // attributes later (e.g. <a href>), serialize them here.
+              out += `<${tag}>${serialize(Array.from(node.childNodes))}</${tag}>`;
+            }
+          } else {
+            out += node.textContent;
+          }
+        }
+      });
+      return out;
+    }
+
+    return serialize(Array.from(wrapper.childNodes));
+  }
+
+  // Yoast escapes < and > as \u003c and \u003e in jsonAnswer (and jsonQuestion).
+  function yoastEscape(str) {
+    return str.replace(/</g, '\u003c').replace(/>/g, '\u003e');
+  }
+
+  // -------------------------- FAQ section detection -------------------------
+
+  // Locate the FAQ section in the parsed block list.
+  // Returns: { faqHeadingIndex, qaPairs: [{questionHtml, answerParts:[...]}], endIndex }
+  // where endIndex is the index of the first block AFTER the FAQ section.
+  function findFaqSection(blocks) {
+    // Find the FAQ heading (an h2 wp:heading whose text normalizes to "faq(s)").
+    let faqIdx = -1;
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (b.kind !== 'block' || b.type !== 'heading') continue;
+      const level = getHeadingLevel(b);
+      if (level !== 2) continue;
+      const text = normalizeHeadingText(getHeadingInnerHtml(b));
+      if (isFaqHeading(text)) {
+        faqIdx = i;
+        break;
+      }
+    }
+    if (faqIdx === -1) return null;
+
+    // Walk forward collecting Q&A pairs until we hit a "real" section break.
+    const qaPairs = [];
+    let current = null; // { questionHtml, answerParts: [{kind, html|items}] }
+    let i = faqIdx + 1;
+
+    for (; i < blocks.length; i++) {
+      const b = blocks[i];
+
+      if (b.kind === 'gap') continue; // whitespace between blocks — keep walking
+
+      if (b.type === 'heading') {
+        const level = getHeadingLevel(b);
+        const innerHtml = getHeadingInnerHtml(b);
+        const text = (() => {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = innerHtml;
+          return (tmp.textContent || '').trim();
+        })();
+
+        if (level === 3) {
+          // New question.
+          if (current) qaPairs.push(current);
+          current = { questionHtml: innerHtml.trim(), answerParts: [] };
+          continue;
+        }
+
+        if (level === 2) {
+          // H2 inside the FAQ region. Two cases:
+          //   (a) Looks like a question (writer goofed) -> treat as question.
+          //   (b) Real new section -> end FAQ collection here.
+          if (looksLikeQuestion(text)) {
+            if (current) qaPairs.push(current);
+            current = { questionHtml: innerHtml.trim(), answerParts: [] };
+            continue;
+          } else {
+            break; // real section break
+          }
+        }
+
+        // Other heading levels (h4+) inside FAQ — treat as content break, stop.
+        break;
+      }
+
+      if (b.type === 'paragraph') {
+        // Paragraphs only count as answers if we have a current question.
+        if (current) {
+          const inner = getParagraphInnerHtml(b).trim();
+          if (inner) current.answerParts.push({ kind: 'paragraph', html: inner });
+        }
+        // If no current question yet (paragraph between FAQ heading and first
+        // question), skip it silently — it's intro text, but per spec the FAQ
+        // structure starts at the first question.
+        continue;
+      }
+
+      if (b.type === 'list') {
+        // Lists are flattened to text with bullet characters, since Yoast's
+        // FAQ schema doesn't support real lists.
+        if (current) {
+          const items = extractListItems(b.innerHtml);
+          if (items.length) current.answerParts.push({ kind: 'list', items });
+        }
+        continue;
+      }
+
+      if (b.type === 'quote' || b.type === 'pullquote') {
+        // Blockquotes flatten to text the same way lists do.
+        if (current) {
+          const text = extractQuoteText(b.innerHtml);
+          if (text) current.answerParts.push({ kind: 'quote', html: text });
+        }
+        continue;
+      }
+
+      // Any other block type inside the FAQ region (image, separator,
+      // embed, etc.) ends FAQ collection — these don't fit Yoast's schema.
+      break;
+    }
+
+    if (current) qaPairs.push(current);
+
+    return { faqHeadingIndex: faqIdx, qaPairs, endIndex: i };
+  }
+
+  // -------------------------- Yoast block construction ----------------------
+
+  function buildYoastBlock(qaPairs) {
+    const baseTime = Date.now();
+
+    const questions = qaPairs.map((pair, idx) => {
+      // Merge all answer parts into a single HTML string with <br/><br/>
+      // between any two consecutive blocks. Lists are flattened into
+      // "• item<br/>• item" form (Yoast's FAQ schema doesn't support real lists).
+      const answerSegments = pair.answerParts.map(part => {
+        if (part.kind === 'paragraph' || part.kind === 'quote') {
+          return part.html;
+        }
+        if (part.kind === 'list') {
+          return part.items.map(item => '• ' + item).join('<br/>');
+        }
+        return '';
+      }).filter(Boolean);
+
+      const mergedAnswerHtml = answerSegments.join('<br/><br/>');
+
+      const answerStructured = inlineToStructured(mergedAnswerHtml);
+      const jsonAnswerHtml = inlineToHtmlString(mergedAnswerHtml);
+
+      // Question can also contain inline formatting.
+      const questionStructured = inlineToStructured(pair.questionHtml);
+      const jsonQuestionHtml = inlineToHtmlString(pair.questionHtml);
+
+      // Yoast's `question` field is also an array (same shape as answer),
+      // and `jsonQuestion` is the plain text version. In observed exports,
+      // jsonQuestion has no escaped tags when the question is plain text;
+      // we still apply yoastEscape so any inline tags get encoded properly.
+      return {
+        id: `faq-question-${baseTime + idx}`,
+        question: questionStructured,
+        answer: answerStructured,
+        jsonQuestion: yoastEscape(jsonQuestionHtml),
+        jsonAnswer: yoastEscape(jsonAnswerHtml)
+      };
+    });
+
+    const attrs = JSON.stringify({ questions })
+      // Yoast escapes < and > in the JSON attrs string so the comment is
+      // robust against being interpreted as HTML. JSON.stringify produces
+      // \u003c/\u003e for any < or > inside JSON-string values when fed
+      // already-escaped strings, but our jsonQuestion/jsonAnswer values
+      // were yoastEscape'd earlier. We additionally escape any stray < or >
+      // that JSON.stringify emitted unescaped (it will, by default).
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e');
+
+    // Build the visible HTML body of the Yoast block.
+    let body = '<div class="schema-faq wp-block-yoast-faq-block">';
+    questions.forEach(q => {
+      body += `<div class="schema-faq-section" id="${q.id}">`;
+      body += `<strong class="schema-faq-question">${q.jsonQuestion.replace(/\u003c/g, '<').replace(/\u003e/g, '>')}</strong> `;
+      body += `<p class="schema-faq-answer">${q.jsonAnswer.replace(/\u003c/g, '<').replace(/\u003e/g, '>')}</p> `;
+      body += '</div> ';
+    });
+    body += '</div>';
+
+    return `<!-- wp:yoast/faq-block ${attrs} -->\n${body}\n<!-- /wp:yoast/faq-block -->`;
+  }
+
+  // -------------------------- Stitching -------------------------------------
+
+  function blockToString(b) {
+    return b.raw;
+  }
+
+  function processText(fullText) {
+    if (!fullText.trim()) return '';
+
+    const blocks = parseBlocks(fullText);
+    const faq = findFaqSection(blocks);
+
+    if (!faq || faq.qaPairs.length === 0) {
+      // No FAQ found — return input unchanged so the writer notices.
+      return fullText;
+    }
+
+    // Reassemble: everything BEFORE the FAQ heading + the FAQ heading itself
+    // + the new Yoast block + everything AFTER the FAQ section.
+    let out = '';
+    for (let i = 0; i <= faq.faqHeadingIndex; i++) {
+      out += blockToString(blocks[i]);
+    }
+
+    out += '\n\n' + buildYoastBlock(faq.qaPairs);
+
+    // Preserve trailing content (gaps + any blocks after the FAQ section).
+    const trailing = blocks.slice(faq.endIndex).map(blockToString).join('');
+    if (trailing.trim()) {
+      out += '\n\n' + trailing.replace(/^\s+/, '');
+    }
+
+    return out;
+  }
+
+  convertBtn.addEventListener('click', function(){
+    outputEl.value = processText(inputEl.value);
+  });
+})();
+</script>
+<script src="../js/iframe-auto-resizer.js"></script>
+</body>
+</html>
