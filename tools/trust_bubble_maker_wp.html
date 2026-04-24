@@ -17,102 +17,215 @@
   <h5>Paste the code from here to Code Editor on WP:</h5>
   <textarea id="outputHtml" readonly style="height: 200px;"></textarea>
 
-  <h5>Log:</h5>
-  <textarea id="logText" readonly style="height: 200px;"></textarea>
-
   <script>
+    // Strip all HTML tags and decode basic entities to get plain text for title matching.
     function toPlainText(html) {
       const div = document.createElement("div");
       div.innerHTML = html;
       return div.textContent || div.innerText || "";
     }
 
+    // Normalize a title string for matching: strip tags, lowercase, collapse whitespace,
+    // remove punctuation that varies between writers (hyphens, etc.).
+    function normalizeTitle(rawHtml) {
+      return toPlainText(rawHtml)
+        .toLowerCase()
+        .replace(/[-_]+/g, " ")     // "pro-tip" -> "pro tip"
+        .replace(/\s+/g, " ")        // collapse whitespace
+        .trim();
+    }
+
+    // Map normalized titles to bubble type. Returns null if not a recognized bubble.
+    function detectBubbleType(rawHtml) {
+      const normalized = normalizeTitle(rawHtml);
+
+      // Pro tip variants
+      const proTipVariants = ["pro tip", "pro tips", "protip", "protips"];
+      if (proTipVariants.includes(normalized)) {
+        return "pro-tip";
+      }
+
+      // Why we chose it variants (also "why I chose it/this", "why we chose this")
+      const whyChoseVariants = [
+        "why we chose it",
+        "why we chose this",
+        "why i chose it",
+        "why i chose this"
+      ];
+      if (whyChoseVariants.includes(normalized)) {
+        return "why-we-chose";
+      }
+
+      return null;
+    }
+
+    // Determine if an href points to an eneba.com host (or subdomain).
+    // Relative paths, anchors, mailto:, tel:, etc. count as "internal" (no nofollow).
+    // Country variants like eneba.de get treated as external (nofollow added).
+    function isInternalLink(href) {
+      if (!href) return true; // no href = treat as internal, leave alone
+
+      const trimmed = href.trim();
+
+      // Anchors, relative paths, mailto, tel, javascript — treat as internal.
+      if (
+        trimmed.startsWith("#") ||
+        trimmed.startsWith("/") ||
+        trimmed.startsWith("?") ||
+        trimmed.startsWith("mailto:") ||
+        trimmed.startsWith("tel:") ||
+        trimmed.startsWith("javascript:")
+      ) {
+        return true;
+      }
+
+      // Try to parse as URL. If it has no protocol, prefix with http:// for parsing.
+      let url;
+      try {
+        const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+          ? trimmed
+          : "http://" + trimmed;
+        url = new URL(candidate);
+      } catch (e) {
+        // Unparseable — treat as internal (no nofollow), don't risk breaking things.
+        return true;
+      }
+
+      const host = url.hostname.toLowerCase();
+      // Exact eneba.com or any subdomain of eneba.com
+      return host === "eneba.com" || host.endsWith(".eneba.com");
+    }
+
+    // Rewrite all <a> tags in the given HTML:
+    //   - Strip any existing target and rel attributes.
+    //   - Add target="_blank".
+    //   - Add rel="noreferrer noopener" for eneba links.
+    //   - Add rel="noreferrer noopener nofollow" for external links.
+    function rewriteLinks(html) {
+      // Match each opening <a ...> tag (not the closing tag, not the inner text).
+      const anchorRegex = /<a\b([^>]*)>/gi;
+
+      return html.replace(anchorRegex, (fullTag, attrsStr) => {
+        // Extract the href value (handles single or double quotes).
+        const hrefMatch = attrsStr.match(/\bhref\s*=\s*("([^"]*)"|'([^']*)')/i);
+        const hrefValue = hrefMatch ? (hrefMatch[2] !== undefined ? hrefMatch[2] : hrefMatch[3]) : null;
+
+        // Strip existing target and rel attributes from the attribute string.
+        let cleanedAttrs = attrsStr
+          .replace(/\s+target\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+          .replace(/\s+rel\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+
+        // Determine the rel value based on whether the link is internal (eneba) or external.
+        const internal = isInternalLink(hrefValue);
+        const relValue = internal
+          ? "noreferrer noopener"
+          : "noreferrer noopener nofollow";
+
+        // Reassemble: keep cleanedAttrs (which still includes href and any other attrs),
+        // then append target and rel.
+        // Trim trailing whitespace on cleanedAttrs to keep spacing tidy.
+        cleanedAttrs = cleanedAttrs.replace(/\s+$/, "");
+
+        return `<a${cleanedAttrs} target="_blank" rel="${relValue}">`;
+      });
+    }
+
+    // Split body HTML on double-<br> sequences (covers <br>, <br/>, <br /> in any combo).
+    // Each split chunk has outer whitespace trimmed. Single <br> is preserved inside chunks.
+    function splitParagraphs(bodyHtml) {
+      // Match two consecutive <br> tags (with optional self-close slash and whitespace between/inside).
+      const doubleBrRegex = /<br\s*\/?>\s*<br\s*\/?>/gi;
+      const chunks = bodyHtml.split(doubleBrRegex).map(c => c.trim());
+      return chunks;
+    }
+
+    // Build the inner paragraph blocks from the body HTML.
+    // Rules:
+    //   - First and last paragraphs get the placeholder attribute.
+    //   - Middle paragraphs (when 3+ exist) get bare <!-- wp:paragraph -->.
+    //   - 1 paragraph: gets placeholder.
+    //   - 2 paragraphs: both get placeholder (first AND last apply).
+    //   - Empty body: single empty <p></p> with placeholder.
+    function buildParagraphBlocks(bodyHtml) {
+      const placeholderOpen = '<!-- wp:paragraph {"placeholder":"Enter your text or add a list..."} -->';
+      const bareOpen = '<!-- wp:paragraph -->';
+      const closeTag = '<!-- /wp:paragraph -->';
+
+      const chunks = splitParagraphs(bodyHtml || "");
+
+      // If body is effectively empty, render one empty paragraph with placeholder.
+      if (chunks.length === 0 || (chunks.length === 1 && chunks[0] === "")) {
+        return `${placeholderOpen}\n<p></p>\n${closeTag}`;
+      }
+
+      const total = chunks.length;
+      const blocks = chunks.map((chunk, i) => {
+        const isFirst = i === 0;
+        const isLast = i === total - 1;
+        const opener = (isFirst || isLast) ? placeholderOpen : bareOpen;
+        return `${opener}\n<p>${chunk}</p>\n${closeTag}`;
+      });
+
+      return blocks.join("\n");
+    }
+
+    // Build the full trust bubble block.
+    function buildTrustBubble(bubbleType, bodyHtml) {
+      const isProTip = bubbleType === "pro-tip";
+      const wrapperOpen = isProTip
+        ? '<!-- wp:eneba/trust-bubbles {"bubbleType":"pro-tip"} -->'
+        : '<!-- wp:eneba/trust-bubbles -->';
+      const wrapperClose = '<!-- /wp:eneba/trust-bubbles -->';
+
+      const bubbleClass = isProTip ? "trust-bubble-pro-tip" : "trust-bubble-why-we-chose";
+      const bubbleLabel = isProTip ? "Pro tip" : "Why we chose it";
+
+      // Rewrite all <a> tags in the body before splitting into paragraphs.
+      const rewrittenBody = rewriteLinks(bodyHtml);
+
+      const paragraphBlocks = buildParagraphBlocks(rewrittenBody);
+
+      // Wrapper divs are kept on a single line to match the exact format WP expects.
+      const wrapperDivs =
+        `<div class="wp-block-eneba-trust-bubbles">` +
+        `<div class="wp-block-eneba-trust-bubbles">` +
+        `<div class="trust-bubbles-content">` +
+        `<div class="trust-bubble ${bubbleClass}">` +
+        `<div class="bubble-type-label">${bubbleLabel}</div>` +
+        `<div class="bubble-content">`;
+
+      const closingDivs = `</div></div></div></div></div>`;
+
+      return `${wrapperOpen}\n${wrapperDivs}${paragraphBlocks}${closingDivs}\n${wrapperClose}`;
+    }
+
     function create_trust_bubbles() {
-        const inputHTML = document.getElementById("inputHtml").value;
+      const inputHTML = document.getElementById("inputHtml").value;
 
-        const bubbleTemplates = {
-          "PRO TIP": () => `<!-- wp:eneba/trust-bubbles {"bubbleType":"pro-tip"} -->
-<div class="wp-block-eneba-trust-bubbles">
-  <div class="wp-block-eneba-trust-bubbles">
-    <div class="trust-bubbles-content">
-      <div class="trust-bubble trust-bubble-pro-tip">
-        <div class="bubble-type-label">Pro tip</div>
-        <div class="bubble-content">
-          <!-- wp:paragraph {"placeholder":"Enter your text or add a list..."} -->
-          <p></p>
-          <!-- /wp:paragraph -->
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- /wp:eneba/trust-bubbles -->`,
+      const tableRegex = /<!-- wp:table -->(.*?)<!-- \/wp:table -->/gs;
 
-          "WHY WE CHOSE IT": () => `<!-- wp:eneba/trust-bubbles -->
-<div class="wp-block-eneba-trust-bubbles">
-  <div class="wp-block-eneba-trust-bubbles">
-    <div class="trust-bubbles-content">
-      <div class="trust-bubble trust-bubble-why-we-chose">
-        <div class="bubble-type-label">Why we chose it</div>
-        <div class="bubble-content">
-          <!-- wp:paragraph {"placeholder":"Enter your text or add a list..."} -->
-          <p></p>
-          <!-- /wp:paragraph -->
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- /wp:eneba/trust-bubbles -->`,
+      const outputHTML = inputHTML.replace(tableRegex, (match, innerTable) => {
+        // Grab all <td> cells in document order. We only care about the first two:
+        // first = title row, second = body row.
+        const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+        const tdMatches = [...innerTable.matchAll(tdRegex)];
 
-          "WHY WE CHOSE THIS": () => `<!-- wp:eneba/trust-bubbles -->
-<div class="wp-block-eneba-trust-bubbles">
-  <div class="wp-block-eneba-trust-bubbles">
-    <div class="trust-bubbles-content">
-      <div class="trust-bubble trust-bubble-why-we-chose">
-        <div class="bubble-type-label">Why we chose it</div>
-        <div class="bubble-content">
-          <!-- wp:paragraph {"placeholder":"Enter your text or add a list..."} -->
-          <p></p>
-          <!-- /wp:paragraph -->
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- /wp:eneba/trust-bubbles -->`
-        };
+        if (tdMatches.length === 0) {
+          return match;
+        }
 
-        const tableRegex = /<!-- wp:table -->(.*?)<!-- \/wp:table -->/gs;
-        let logEntries = [];
-        let replacements = 0;
+        const titleHtml = tdMatches[0][1];
+        const bodyHtml = tdMatches[1] ? tdMatches[1][1] : "";
 
-        const outputHTML = inputHTML.replace(tableRegex, (match, innerTable, offset) => {
-            const tdRegex = /<td>(.*?)<\/td>/is;
-            const tdMatch = innerTable.match(tdRegex);
+        const bubbleType = detectBubbleType(titleHtml);
+        if (!bubbleType) {
+          return match;
+        }
 
-            if (!tdMatch) {
-                logEntries.push(`Skipped table at position ${offset}: No <td> found.`);
-                return match;
-            }
+        return buildTrustBubble(bubbleType, bodyHtml);
+      });
 
-            const titleKey = toPlainText(tdMatch[1]).trim().toUpperCase();
-            const templateFn = bubbleTemplates[titleKey];
-
-            if (!templateFn) {
-                logEntries.push(`Skipped table of an unrecognized bubble type "${tdMatch[1]}".`);
-                return match;
-            }
-
-            replacements++;
-            logEntries.push(`✅ Replaced table at position ${offset} → "${tdMatch[1]}"`);
-
-            return templateFn();
-        });
-
-        document.getElementById("outputHtml").value = outputHTML;
-        document.getElementById("logText").value =
-          `Total Replacements: ${replacements}\n\n` + logEntries.join("\n\n");
+      document.getElementById("outputHtml").value = outputHTML;
     }
   </script>
   <script src="../js/iframe-auto-resizer.js"></script>
