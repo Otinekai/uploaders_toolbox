@@ -10,6 +10,7 @@ h3 {
     text-align: center;
     color: goldenrod;
     text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+    letter-spacing: 0.08em;
     margin-top: 40px;
     margin-bottom: 10px;
     animation: glowPulse 5s ease-in-out infinite alternate; 
@@ -40,6 +41,11 @@ h5 {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-weight: 500;
     color: rgba(255, 255, 255, .85);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.accordion-toggle:hover {
+  transform: translateY(-1px);
 }
 
 .tag-new {
@@ -51,6 +57,17 @@ h5 {
   margin-left: 10px;
   font-size: 0.85em;
   font-weight: 500;
+}
+
+.tag-updated {
+  background-color: rgba(148, 163, 184, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: rgb(178, 194, 217);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  margin-left: auto;
+  font-size: 0.75em;
+  font-weight: 400;
 }
 
 .within-frame-button {
