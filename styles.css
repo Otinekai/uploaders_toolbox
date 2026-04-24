@@ -122,3 +122,11 @@ textarea {
   padding: 10px;
   margin-bottom: 1rem;
 }
+
+.side-animal {
+  position: fixed;
+  height: 60px;
+  image-rendering: pixelated;
+  z-index: 999;
+  cursor: pointer;
+}

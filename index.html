@@ -9,6 +9,15 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+<img src="visuals/sleepy-cat.gif" class="side-animal right">
+<img src="visuals/very-jumpy-cat.gif" class="side-animal right">
+<img src="visuals/swimming-dog.gif" class="side-animal right">
+
+<img src="visuals/jumpy-cat.gif" class="side-animal left">
+<img src="visuals/swimming-corgi.gif" class="side-animal left">
+<img src="visuals/slightly-dancing-duck.gif" class="side-animal left">
+
   <div class="accordion" x-data="{ open: null }">
 
     <h3>LINKS</h3>
@@ -62,6 +71,58 @@
       iframe.style.height = event.data.height + 'px';
     }
   });
+
+      // Place each animal randomly on its assigned side, no overlaps
+        const allAnimals = Array.from(document.querySelectorAll('.side-animal'));
+
+        const shuffled = allAnimals.sort(() => Math.random() - 0.5);
+        shuffled.slice(2).forEach(a => a.style.display = 'none');
+
+        const placed = [];
+
+        shuffled.slice(0, 2).forEach(animal => {
+          const isRight = animal.classList.contains('right');
+          const animalW = 60;
+          const animalH = 60;
+
+          function placeAnimal() {
+            const viewW = window.innerWidth;
+            const viewH = window.innerHeight;
+            const xMin = isRight ? viewW * 0.55 : 0;
+            const xMax = isRight ? viewW - animalW - 10 : viewW * 0.45 - animalW;
+
+            let top, left, attempts = 0, overlap;
+            do {
+              top  = Math.random() * (viewH - animalH);
+              left = xMin + Math.random() * (xMax - xMin);
+              overlap = placed.some(p => 
+                Math.abs(p.top - top) < animalH + 5 && 
+                Math.abs(p.left - left) < animalW + 5
+              );
+              attempts++;
+            } while (overlap && attempts < 100);
+
+            animal.style.top  = top + 'px';
+            animal.style.left = left + 'px';
+
+            const idx = placed.indexOf(animal._placed);
+            const newPos = { top, left };
+            if (idx !== -1) placed[idx] = newPos;
+            else placed.push(newPos);
+            animal._placed = newPos;
+          }
+
+          animal.style.position = 'fixed';
+          placeAnimal();
+
+          animal.addEventListener('mouseover', () => {
+            const now = Date.now();
+            if (animal._lastMove && now - animal._lastMove < 300) return;
+            animal._lastMove = now;
+            placeAnimal();
+          });
+        });
+
   </script>
 </body>
 </html>
