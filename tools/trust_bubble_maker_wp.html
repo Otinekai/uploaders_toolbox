@@ -56,6 +56,11 @@
         return "why-we-chose";
       }
 
+      // Why it matters
+      if (normalized === "why it matters") {
+        return "why-it-matters";
+      }
+
       return null;
     }
 
@@ -171,14 +176,19 @@
 
     // Build the full trust bubble block.
     function buildTrustBubble(bubbleType, bodyHtml) {
-      const isProTip = bubbleType === "pro-tip";
-      const wrapperOpen = isProTip
-        ? '<!-- wp:eneba/trust-bubbles {"bubbleType":"pro-tip"} -->'
-        : '<!-- wp:eneba/trust-bubbles -->';
+      // "why-we-chose" is the default bubble type and omits the bubbleType attribute.
+      // "pro-tip" and "why-it-matters" include it explicitly.
+      const wrapperOpen = bubbleType === "why-we-chose"
+        ? '<!-- wp:eneba/trust-bubbles -->'
+        : `<!-- wp:eneba/trust-bubbles {"bubbleType":"${bubbleType}"} -->`;
       const wrapperClose = '<!-- /wp:eneba/trust-bubbles -->';
 
-      const bubbleClass = isProTip ? "trust-bubble-pro-tip" : "trust-bubble-why-we-chose";
-      const bubbleLabel = isProTip ? "Pro tip" : "Why we chose it";
+      const bubbleClass = `trust-bubble-${bubbleType}`;
+      const bubbleLabel = {
+        "pro-tip": "Pro tip",
+        "why-we-chose": "Why we chose it",
+        "why-it-matters": "Why it matters"
+      }[bubbleType];
 
       // Rewrite all <a> tags in the body before splitting into paragraphs.
       const rewrittenBody = rewriteLinks(bodyHtml);
