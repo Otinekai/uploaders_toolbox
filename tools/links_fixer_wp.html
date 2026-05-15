@@ -28,7 +28,17 @@
           // Anchor link? Do nothing
           if (href.trim().startsWith("#")) return match;
 
+          // Fix common scheme typos: http://, http:/, https:/, htps:// -> https://
+          // The negative lookahead on https?:\/ ensures this doesn't touch a correct https://.
+          const fixedHref = href.replace(
+            /^\s*(https?:\/(?!\/)|htps:\/\/|http:\/\/)/i,
+            "https://"
+          );
+
           let tag = match;
+          if (fixedHref !== href) {
+            tag = tag.replace(/href=(["'])[^"']*\1/, `href=$1${fixedHref}$1`);
+          }
 
           // Ensure target="_blank" if missing
           if (!/target=/.test(tag)) {
@@ -38,7 +48,7 @@
           // Ensure rel is correct if missing
           if (!/rel=/.test(tag)) {
             const isTrustedExternal = trustedExternalPatterns.some(pattern =>
-              href.includes(pattern)
+              fixedHref.includes(pattern)
             );
 
             if (isTrustedExternal) {
